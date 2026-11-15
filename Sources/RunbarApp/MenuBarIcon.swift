@@ -1,6 +1,6 @@
 import AppKit
 
-/// Ícone da menu bar desenhado como template image (o macOS pinta de preto ou branco).
+/// Menu bar icon drawn as a template image (macOS paints it black or white).
 enum MenuBarIcon {
     enum Badge { case none, alert, busy }
 
@@ -18,7 +18,7 @@ enum MenuBarIcon {
                 NSBezierPath(ovalIn: NSRect(x: 4.1, y: y + 1.5, width: 1.8, height: 1.8)).fill()
             }
             guard badge != .none, let ctx = NSGraphicsContext.current else { return true }
-            // Abre um furo no canto e desenha o selo dentro dele.
+            // Cut a hole in the corner and draw the badge inside it.
             ctx.compositingOperation = .clear
             NSBezierPath(ovalIn: NSRect(x: 11, y: -1, width: 9, height: 9)).fill()
             ctx.compositingOperation = .sourceOver

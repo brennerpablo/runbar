@@ -20,7 +20,7 @@ public enum Paths {
         return path
     }
 
-    /// `~/.config/runbar` (ou `RUNBAR_CONFIG_DIR`, útil para testes).
+    /// `~/.config/runbar` (or `RUNBAR_CONFIG_DIR`, useful for tests).
     public static var configDir: URL {
         if let custom = ProcessInfo.processInfo.environment["RUNBAR_CONFIG_DIR"], !custom.isEmpty {
             return URL(fileURLWithPath: expand(custom), isDirectory: true)
@@ -58,7 +58,7 @@ public enum ConfigBootstrap {
 
     """
 
-    /// Cria as pastas, mantém schema.json e README.md atualizados e cria um config.json vazio se não existir.
+    /// Creates the folders, keeps schema.json and README.md up to date, and creates an empty config.json if missing.
     public static func ensureFiles() {
         let fm = FileManager.default
         for dir in [Paths.configDir, Paths.supportDir, Paths.logsDir] {

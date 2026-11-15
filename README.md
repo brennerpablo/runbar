@@ -1,20 +1,20 @@
 # Runbar
 
-App de menu bar do macOS para subir, parar e acompanhar os servidores de desenvolvimento
-de todos os projetos (Next.js, APIs Python, docker compose…) num lugar só.
+A macOS menu bar app to start, stop and watch the development servers of all your
+projects (Next.js, Python APIs, docker compose…) in one place.
 
-- Lista por projeto com status, porta real, memória e CPU de cada serviço.
-- Detalhe com PID, horário de início, último log, gráficos de memória e CPU (30 min) e a saída ao vivo.
-- Detecta conflito de porta e quando o Next pula para outra porta; mostra portas ocupadas por processos de fora.
-- Reconhece serviços iniciados fora do Runbar (no Terminal, por exemplo) pela pasta do processo.
-- Os serviços sobrevivem a reiniciar ou atualizar o Runbar: ele readota os processos ao abrir.
-- Dois visuais: sólido e Liquid Glass (automático no macOS 26+).
+- A list per project with the status, real port, memory and CPU of each service.
+- A detail view with PID, start time, last log, memory and CPU charts (30 min) and live output.
+- Detects port conflicts and when Next jumps to another port; shows ports held by outside processes.
+- Recognizes services started outside Runbar (in Terminal, for example) by the process's folder.
+- Services survive restarting or updating Runbar: it re-adopts the processes when it opens.
+- Two looks: solid and Liquid Glass (automatic on macOS 26+).
 
-## Configuração: um JSON que o seu agente consegue escrever
+## Configuration: a JSON file your agent can write
 
-Tudo vem de `~/.config/runbar/config.json`. O app mantém ao lado um `schema.json` e um
-`README.md` escrito para agentes, e recarrega sozinho quando o arquivo muda. A janela
-"Configurar com agente…" tem um pedido pronto para colar no Claude Code, Codex ou Cursor.
+Everything comes from `~/.config/runbar/config.json`. The app keeps a `schema.json` and a
+`README.md` written for agents next to it, and reloads on its own when the file changes. The
+"Set up with an agent…" window has a ready-made request to paste into Claude Code, Codex or Cursor.
 
 ```json
 {
@@ -32,57 +32,58 @@ Tudo vem de `~/.config/runbar/config.json`. O app mantém ao lado um `schema.jso
 }
 ```
 
-O formato completo está em [`Sources/RunbarCore/BundledDocs.swift`](Sources/RunbarCore/BundledDocs.swift)
-(é o mesmo texto que o app grava em `~/.config/runbar/README.md`).
+The full format is in [`Sources/RunbarCore/BundledDocs.swift`](Sources/RunbarCore/BundledDocs.swift)
+(the same text the app writes to `~/.config/runbar/README.md`).
 
-## Linha de comando
+## Command line
 
 ```
-runbar validate [--json]        confere o config.json (linha e coluna de cada erro)
-runbar status [--json]          status, porta real, memória e CPU
-runbar start <id> [--wait]      sobe um serviço (--wait espera a porta abrir)
-runbar stop <id>                para o serviço e os processos filhos
+runbar validate [--json]        check config.json (line and column of each error)
+runbar status [--json]          status, real port, memory and CPU
+runbar start <id> [--wait]      start a service (--wait waits for the port to open)
+runbar stop <id>                stop the service and its child processes
 runbar restart <id> [--wait]
 runbar logs <id> [-n 100] [-f]
 runbar reload | path
 ```
 
-Se o app estiver fechado, `start`, `stop` e `restart` abrem o app primeiro.
+If the app is closed, `start`, `stop` and `restart` open it first.
 
-## Compilar e instalar
+## Build and install
 
-Precisa só do Command Line Tools (não precisa do Xcode).
+Only needs the Command Line Tools (no Xcode).
 
 ```
 make app       # build/Runbar.app
-make install   # instala em ~/Applications, liga o comando runbar no PATH e abre o app
+make install   # installs to ~/Applications, puts the runbar command on your PATH and opens the app
 make build     # swift build (debug)
 ```
 
-Para desinstalar: feche o Runbar, apague `~/Applications/Runbar.app` e o link `runbar`
-(em `/opt/homebrew/bin`, `/usr/local/bin` ou `~/.local/bin`). A configuração fica em
-`~/.config/runbar`, os logs em `~/Library/Logs/Runbar`.
+To uninstall: quit Runbar, delete `~/Applications/Runbar.app` and the `runbar` link
+(in `/opt/homebrew/bin`, `/usr/local/bin` or `~/.local/bin`). The configuration lives in
+`~/.config/runbar`, the logs in `~/Library/Logs/Runbar`.
 
-### Revisar o visual sem clicar na menu bar
+### Review the UI without clicking the menu bar
 
 ```
-.build/debug/RunbarApp --snapshot /tmp/runbar-snap [id-do-serviço]
+.build/debug/RunbarApp --snapshot /tmp/runbar-snap [service-id]
 ```
 
-Desenha o popover (lista e detalhe, sólido e Liquid Glass, claro e escuro) e a janela do
-agente em PNG, com os dados reais. Não abre socket nem mexe em serviços.
+Draws the panel (list and detail, solid and Liquid Glass, light and dark) and the agent
+window to PNGs, with real data. Opens no socket and touches no services.
 
-## Como funciona
+## How it works
 
-| peça | onde |
-|------|------|
-| Parser JSON com linha/coluna e validação do config | `Sources/RunbarCore/JSON.swift`, `Config.swift` |
-| Processos: árvore, memória (phys_footprint), CPU, portas em LISTEN, pasta | `Sources/RunbarCore/ProcScanner.swift` (libproc) |
-| Subir serviço: login shell, grupo de processos próprio, saída no arquivo de log | `Sources/RunbarCore/Spawner.swift` |
-| Socket Unix entre o CLI e o app | `Sources/RunbarCore/Control.swift` |
-| Estado de cada serviço, readoção, reinício automático | `Sources/RunbarApp/ServiceRuntime.swift` |
-| Modelo do app, monitoramento a cada 2 s, detecção de conflito | `Sources/RunbarApp/AppModel.swift`, `Display.swift` |
-| Interface | `Sources/RunbarApp/PopoverView.swift`, `ServiceDetailView.swift`, `AgentView.swift` |
+| part | where |
+|------|-------|
+| JSON parser with line/column, and config validation | `Sources/RunbarCore/JSON.swift`, `Config.swift` |
+| Processes: tree, memory (phys_footprint), CPU, LISTEN ports, folder | `Sources/RunbarCore/ProcScanner.swift` (libproc) |
+| Starting a service: login shell, its own process group, output to the log file | `Sources/RunbarCore/Spawner.swift` |
+| Unix socket between the CLI and the app | `Sources/RunbarCore/Control.swift` |
+| Each service's state, re-adoption, automatic restart | `Sources/RunbarApp/ServiceRuntime.swift` |
+| App model, monitoring every 2 s, conflict detection | `Sources/RunbarApp/AppModel.swift`, `Display.swift` |
+| Menu bar icon and panel (drawn by the app, not `MenuBarExtra`; pinned under the icon) | `Sources/RunbarApp/StatusPanel.swift` |
+| UI | `Sources/RunbarApp/PopoverView.swift`, `ServiceDetailView.swift`, `AgentView.swift`, `Components.swift`, `Theme.swift` |
 
-O `@State` do SwiftUI virou macro no SDK do macOS 27 e o plugin só vem com o Xcode; por isso
-as views usam `@ViewState` (`Sources/RunbarApp/ViewState.swift`), que faz o mesmo com o tipo `State`.
+SwiftUI's `@State` became a macro in the macOS 27 SDK and its plugin only ships with Xcode, so
+the views use `@ViewState` (`Sources/RunbarApp/ViewState.swift`), which does the same with the `State` type.

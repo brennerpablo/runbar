@@ -2,8 +2,8 @@ import AppKit
 import RunbarCore
 import SwiftUI
 
-/// `Runbar --snapshot <pasta> [id-do-serviço]` desenha o popover fora da tela e salva PNGs.
-/// Serve para revisar o visual sem clicar na menu bar. Não abre socket nem mexe em serviços.
+/// `Runbar --snapshot <folder> [service-id]` draws the popover offscreen and saves PNGs.
+/// Lets you review the UI without clicking the menu bar. Opens no socket and touches no services.
 @MainActor
 enum Snapshotter {
     static func run(into dir: URL, detail: String?) {
@@ -29,7 +29,7 @@ enum Snapshotter {
         exit(0)
     }
 
-    /// Fora da tela não existe desfoque: no vidro, simula um papel de parede atrás do véu do painel.
+    /// There is no blur offscreen: for glass, fake a wallpaper behind the panel's tint.
     @ViewBuilder
     private static func backdrop<V: View>(_ view: V, glass: Bool, dark: Bool) -> some View {
         if glass {
@@ -51,7 +51,7 @@ enum Snapshotter {
         let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 400, height: 800), styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = host.appearance
         window.contentView = host
-        // Duas passadas de layout: a AdaptiveScroll mede o conteúdo na primeira.
+        // Two layout passes: AdaptiveScroll measures its content on the first.
         for _ in 0..<3 {
             host.layoutSubtreeIfNeeded()
             let size = host.fittingSize

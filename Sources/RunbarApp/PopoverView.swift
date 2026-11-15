@@ -34,7 +34,7 @@ struct PopoverView: View {
         }
     }
 
-    // MARK: - Lista
+    // MARK: - List
 
     private func list(_ t: Theme) -> some View {
         let alerts = model.alertingServices
@@ -78,7 +78,7 @@ struct PopoverView: View {
                             if !model.otherListeners.isEmpty { othersSection(t) }
                         }
                         .padding(.horizontal, t.gutter)
-                        // Espaço para a última linha rolar acima da busca flutuante.
+                        // Room for the last row to scroll above the floating search.
                         .padding(.bottom, Layout.searchHeight + 24)
                     }
                     LinearGradient(
@@ -99,7 +99,7 @@ struct PopoverView: View {
         }
     }
 
-    /// O painel não passa da altura de um notebook: avisos no topo tiram espaço da lista.
+    /// The panel stays within a laptop's height: notices at the top take space from the list.
     private func listMaxHeight(alerts: Bool) -> CGFloat {
         500 - (alerts ? 44 : 0) - (model.configError == nil ? 0 : 96)
     }
@@ -133,7 +133,7 @@ struct PopoverView: View {
         .frame(height: Layout.control)
     }
 
-    /// Tudo que morava no rodapé: configuração, visual, pastas e sair.
+    /// Everything that used to live in the footer: config, look, folders and quit.
     private var moreMenu: some View {
         Menu {
             Button("Open config.json") { model.openConfigFile() }
@@ -183,7 +183,7 @@ struct PopoverView: View {
         }
     }
 
-    /// Uma linha para o primeiro alerta; o toque abre o serviço.
+    /// One line for the first alert; clicking it opens the service.
     private func alertStrip(_ rt: ServiceRuntime, count: Int, _ t: Theme) -> some View {
         let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         let title = count == 1 ? "1 alert" : "\(count) alerts"
@@ -226,7 +226,7 @@ struct PopoverView: View {
         .padding(.leading, 2)
     }
 
-    /// Busca flutuante sobre o fim da lista. ⌘K leva o cursor para ela.
+    /// Floating search over the end of the list. ⌘K moves the cursor into it.
     private func searchBar(_ t: Theme) -> some View {
         let shape = RoundedRectangle(cornerRadius: t.cardRadius, style: .continuous)
         return HStack(spacing: 8) {
@@ -262,7 +262,7 @@ struct PopoverView: View {
         .overlay(shape.strokeBorder(Color.rbCardBorder, lineWidth: 1))
         .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
         .background {
-            // Atalho sem botão visível.
+            // Shortcut without a visible button.
             Button("Search") { searchFocused = true }
                 .keyboardShortcut("k", modifiers: .command)
                 .opacity(0)
@@ -338,7 +338,7 @@ struct PopoverView: View {
         .rbCard(t)
     }
 
-    /// Portas ocupadas por processos que não são serviços do Runbar: último cartão da lista.
+    /// Ports held by processes that aren't Runbar services: the last card in the list.
     private func othersSection(_ t: Theme) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -383,7 +383,7 @@ struct PopoverView: View {
         .rbCard(t)
     }
 
-    // MARK: - Ajudantes
+    // MARK: - Helpers
 
     private func openAgentWindow() {
         openWindow(id: "agent")
@@ -403,9 +403,9 @@ struct PopoverView: View {
     }
 }
 
-// MARK: - Projeto
+// MARK: - Project
 
-/// Um cartão por projeto: cabeçalho com um pontinho por serviço e, aberto, as linhas.
+/// One card per project: a header with a dot per service and, when open, the rows.
 private struct GroupSection: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
@@ -465,7 +465,7 @@ private struct GroupSection: View {
     }
 }
 
-// MARK: - Linha do serviço
+// MARK: - Service row
 
 private struct ServiceRow: View {
     @Environment(AppModel.self) private var model

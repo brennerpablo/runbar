@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-// Protocolo entre o CLI e o app: uma linha JSON de pedido, uma resposta JSON, socket Unix.
+// Protocol between the CLI and the app: one JSON request line, one JSON response, Unix socket.
 
 public struct ControlRequest: Codable, Sendable {
     public var cmd: String
@@ -33,7 +33,7 @@ public struct ServiceStatus: Codable, Sendable {
     public var cwd: String
     public var logFile: String
     public var alert: String?
-    /// Porta com que o serviço subiu (difere de `port` quando o autoPort escolheu outra).
+    /// Port the service started on (differs from `port` when autoPort picked another).
     public var activePort: Int?
 
     public init(id: String, project: String, type: String, status: String, port: Int?, realPort: Int?, listening: [Int],

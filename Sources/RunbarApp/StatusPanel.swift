@@ -3,11 +3,11 @@ import Observation
 import RunbarCore
 import SwiftUI
 
-/// Ícone na menu bar e o painel que ele abre.
+/// The menu bar icon and the panel it opens.
 ///
-/// O painel é nosso, não o do MenuBarExtra: a janela do sistema trazia o próprio vidro e, depois de
-/// fechar e abrir, voltava sem os cantos e solta da menu bar. Aqui o formato e o fundo são desenhados
-/// pela view, e a posição é recalculada a partir do ícone toda vez que o painel abre.
+/// The panel is ours, not MenuBarExtra's: the system window brought its own glass and, after
+/// closing and reopening, came back without rounded corners and detached from the menu bar. Here the
+/// view draws the shape and background, and the position is recomputed from the icon on every open.
 @MainActor
 final class StatusBarController: NSObject {
     static let shared = StatusBarController()
@@ -30,7 +30,7 @@ final class StatusBarController: NSObject {
 
     @objc private func clicked() { panel.toggle() }
 
-    /// Redesenha ícone e número sempre que algo que eles mostram muda.
+    /// Redraws the icon and count whenever anything they show changes.
     private func observe() {
         withObservationTracking { render() } onChange: { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.observe() } }
@@ -52,7 +52,7 @@ final class StatusBarController: NSObject {
 
 @MainActor
 final class PanelController: NSObject, NSWindowDelegate {
-    /// Distância entre a menu bar e o topo do painel.
+    /// Gap between the menu bar and the top of the panel.
     static let gap: CGFloat = 6
 
     weak var statusButton: NSStatusBarButton?
@@ -61,7 +61,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     var isOpen: Bool { panel?.isVisible == true }
 
-    /// App que estava na frente quando o painel abriu, para devolver o foco ao fechar com Esc ou no ícone.
+    /// App that was frontmost when the panel opened, to give focus back when closing with Esc or the icon.
     private var previousApp: NSRunningApplication?
     private var resignActive: NSObjectProtocol?
 
@@ -71,7 +71,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         let panel = self.panel ?? makePanel()
         self.panel = panel
         place(panel)
-        // Com o app ativo, nenhum outro app tira o foco do painel enquanto ele está aberto.
+        // With the app active, no other app takes focus from the panel while it is open.
         let front = NSWorkspace.shared.frontmostApplication
         previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : front
         NSApp.activate()
@@ -81,7 +81,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                 MainActor.assumeIsolated { self?.close() }
             }
         }
-        // O botão desmarca sozinho ao soltar o mouse; marca de novo depois que o clique termina.
+        // The button unhighlights itself on mouse up; highlight it again once the click is done.
         RunLoop.main.perform(inModes: [.default]) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.isOpen else { return }
@@ -96,8 +96,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// `restoreFocus`: fechou por Esc ou pelo ícone, então o foco volta para o app de antes. Num clique
-    /// em outro app, quem decide o foco é esse clique.
+    /// `restoreFocus`: closed with Esc or the icon, so focus goes back to the previous app. On a click
+    /// in another app, that click decides where focus goes.
     func close(restoreFocus: Bool = false) {
         if let outsideClick { NSEvent.removeMonitor(outsideClick) }
         outsideClick = nil
@@ -108,7 +108,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.orderOut(nil)
         let previous = previousApp
         previousApp = nil
-        // A janela do agente aberta segura o foco no Runbar.
+        // An open agent window keeps focus in Runbar.
         let ownWindowOpen = NSApp.windows.contains { $0.isVisible && $0.level == .normal && $0 !== panel }
         guard restoreFocus, NSApp.isActive, !ownWindowOpen else { return }
         if let previous, !previous.isTerminated {
@@ -119,8 +119,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Com o Runbar ativo, perder o foco é a janela do agente abrindo ou o app saindo da frente: fecha.
-    /// Sem o Runbar ativo, outro app retomou o foco sem clique do usuário; o painel continua aberto.
+    /// With Runbar active, losing focus means the agent window opened or the app left the front: close.
+    /// With Runbar inactive, another app took focus back without a user click; the panel stays open.
     func windowDidResignKey(_ notification: Notification) {
         if NSApp.isActive { close() }
     }
@@ -148,13 +148,13 @@ final class PanelController: NSObject, NSWindowDelegate {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         let host = NSHostingView(rootView: root)
-        // O tamanho é a gente que aplica (com o topo preso); o hosting view não mexe na janela.
+        // We apply the size ourselves (with the top pinned); the hosting view doesn't resize the window.
         host.sizingOptions = []
         panel.contentView = host
         return panel
     }
 
-    /// Embaixo do ícone, alinhado pela esquerda dele, sem sair da tela.
+    /// Below the icon, aligned to its left edge, kept on screen.
     private func place(_ panel: RunbarPanel) {
         guard let itemWindow = statusButton?.window else { return }
         let item = itemWindow.frame
@@ -166,7 +166,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.setFrame(frame, display: false)
     }
 
-    /// O conteúdo mudou de altura: a janela acompanha e o topo fica onde está.
+    /// The content changed height: the window follows and the top stays put.
     func resize(to size: CGSize) {
         guard let panel, size.width > 0, size.height > 0 else { return }
         let target = CGSize(width: size.width.rounded(.up), height: size.height.rounded(.up))
@@ -176,9 +176,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 }
 
-/// Painel sem moldura: o fundo, os cantos e a borda vêm da view (`rbPanel`).
+/// Borderless panel: the background, corners and border come from the view (`rbPanel`).
 final class RunbarPanel: NSPanel {
-    /// Topo fixo na tela; toda mudança de tamanho cresce ou encolhe para baixo.
+    /// Fixed top on screen; every size change grows or shrinks downward.
     var pinnedTop: CGFloat?
     var maxHeight: CGFloat = .greatestFiniteMagnitude
 

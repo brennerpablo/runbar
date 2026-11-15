@@ -7,7 +7,7 @@ struct RunbarMain: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        // O ícone da menu bar e o painel ficam em StatusPanel.swift.
+        // The menu bar icon and panel live in StatusPanel.swift.
         Window("Set up with an agent", id: "agent") {
             AgentView()
                 .environment(AppModel.shared)
@@ -15,7 +15,7 @@ struct RunbarMain: App {
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
 
-        // Sem uma segunda cena o Window seria a única, e o app fecharia junto com a janela do agente.
+        // Without a second scene the Window would be the only one, and the app would quit with the agent window.
         Settings { EmptyView() }
     }
 }
@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         StatusBarController.shared.install()
     }
 
-    /// O app vive na menu bar: fechar o painel ou a janela do agente não encerra nada.
+    /// The app lives in the menu bar: closing the panel or the agent window quits nothing.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {

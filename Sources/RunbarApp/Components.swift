@@ -5,7 +5,7 @@ import SwiftUI
 struct StatusDot: View {
     let dot: ServiceDisplay.Dot
     var size: CGFloat = Layout.dot
-    /// Auréola suave em volta dos pontos cheios (some nos pontinhos do cabeçalho do projeto).
+    /// Soft halo around filled dots (off for the small dots in the project header).
     var halo = true
 
     var body: some View {
@@ -32,7 +32,7 @@ struct StatusDot: View {
     }
 }
 
-/// Um pontinho por serviço no cabeçalho do projeto: o estado continua visível com o grupo fechado.
+/// One small dot per service in the project header: state stays visible with the group collapsed.
 struct Pips: View {
     let dots: [ServiceDisplay.Dot]
 
@@ -46,7 +46,7 @@ struct Pips: View {
     }
 }
 
-/// Rótulo de seção: o mesmo estilo em métricas, comando, pasta e saída.
+/// Section label: the same style for metrics, command, folder and output.
 struct SectionLabel: View {
     let text: String
     var body: some View {
@@ -57,7 +57,7 @@ struct SectionLabel: View {
     }
 }
 
-/// Chevron dos grupos que abrem e fecham.
+/// Chevron for groups that expand and collapse.
 struct DisclosureChevron: View {
     let open: Bool
     var body: some View {
@@ -70,7 +70,7 @@ struct DisclosureChevron: View {
     }
 }
 
-/// Marca do Runbar: os dois servidores empilhados do ícone da menu bar.
+/// Runbar mark: the two stacked servers from the menu bar icon.
 struct RunbarGlyph: View {
     var size: CGFloat = 16
 
@@ -99,10 +99,10 @@ struct AppMark: View {
     }
 }
 
-/// ScrollView que cresce até `maxHeight` e só rola depois disso (o painel acompanha o conteúdo).
+/// ScrollView that grows up to `maxHeight` and only scrolls beyond it (the panel follows the content).
 struct AdaptiveScroll<Content: View>: View {
     let maxHeight: CGFloat
-    /// Enquanto verdadeiro, a área só cresce (filtrar não faz o painel encolher e pular).
+    /// While true, the area only grows (filtering doesn't make the panel shrink and jump).
     var holdHeight = false
     @ViewBuilder var content: Content
     @ViewState private var height: CGFloat = 240
@@ -128,9 +128,9 @@ private struct ContentHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-/// Porta em pílula, com largura fixa para alinhar em coluna.
+/// Port in a pill, fixed width so it lines up in a column.
 struct Pill: View {
-    /// `live`: porta aberta e clicável. `warn`: aberta, mas não onde devia. `idle`: nada escutando.
+    /// `live`: port open and clickable. `warn`: open, but not where expected. `idle`: nothing listening.
     enum Tone { case idle, live, warn }
     let text: String
     var tone: Tone = .idle
@@ -200,14 +200,14 @@ struct Banner: View {
     }
 }
 
-// MARK: - Blocos de resumo
+// MARK: - Summary tiles
 
-/// Bloco do topo: rótulo, número grande e um complemento à direita (total ou barrinhas).
+/// Top tile: label, large number and something on the right (a total or mini bars).
 struct StatTile<Trailing: View>: View {
     let label: String
     let value: String
     var unit: String?
-    /// Degrau mais claro, para o bloco principal.
+    /// Lighter step, for the main tile.
     var raised = false
     var live = false
     @ViewBuilder var trailing: Trailing
@@ -233,7 +233,7 @@ struct StatTile<Trailing: View>: View {
                     .minimumScaleFactor(0.7)
                     .layoutPriority(1)
                 if let unit {
-                    // A unidade nunca quebra: se faltar espaço, é o número que encolhe.
+                    // The unit never wraps: if space runs out, the number shrinks.
                     Text(unit)
                         .font(.system(size: 11.5))
                         .foregroundStyle(Color.rbText2)
@@ -252,7 +252,7 @@ struct StatTile<Trailing: View>: View {
     }
 }
 
-/// Histórico em barrinhas; a última (agora) vem na cor do app.
+/// History as mini bars; the last one (now) uses the app color.
 struct MiniBars: View {
     let values: [Double]
     var floorAtZero = true
@@ -288,13 +288,13 @@ enum Metrics {
         }
     }
 
-    /// Junta os pontos em até `count` faixas (média de cada uma), da mais antiga para a mais nova.
+    /// Groups the points into up to `count` buckets (each one's average), oldest to newest.
     static func buckets(_ points: [MetricPoint], count: Int) -> [Bucket] {
         guard count > 0, !points.isEmpty else { return [] }
         guard points.count > count else { return points.map { Bucket(date: $0.date, value: $0.value) } }
         let size = Int((Double(points.count) / Double(count)).rounded(.up))
         var out: [Bucket] = []
-        // Agrupa a partir do fim: a última faixa é sempre a mais recente e completa.
+        // Group from the end: the last bucket is always the most recent and complete.
         var end = points.count
         while end > 0 {
             let start = max(0, end - size)
@@ -305,7 +305,7 @@ enum Metrics {
         return out.reversed()
     }
 
-    /// Faixa vertical do gráfico. Memória não parte do zero, para a variação aparecer.
+    /// Vertical range of the chart. Memory doesn't start at zero, so changes show.
     static func scale(_ values: [Double], floorAtZero: Bool) -> Scale {
         let lo = floorAtZero ? 0 : (values.min() ?? 0)
         let hi = values.max() ?? 1
@@ -314,9 +314,9 @@ enum Metrics {
     }
 }
 
-// MARK: - Estilos de botão (com hover; o estado fica numa view interna)
+// MARK: - Button styles (with hover; the state lives in an inner view)
 
-/// Botão de texto: verde cheio quando é a ação principal, véu neutro nos demais.
+/// Text button: solid green for the primary action, a neutral tint otherwise.
 struct RBButtonStyle: ButtonStyle {
     var prominent = false
 
@@ -358,7 +358,7 @@ private struct RBButtonBody: View {
     }
 }
 
-/// Botão redondo de ação da linha (parar, iniciar, tentar de novo), sempre do mesmo tamanho.
+/// Round row action button (stop, start, try again), always the same size.
 struct RowActionButtonStyle: ButtonStyle {
     enum Tone { case neutral, live, warn }
     var tone: Tone = .neutral
@@ -404,7 +404,7 @@ private struct RowActionBody: View {
     }
 }
 
-/// Ícone do cabeçalho (atualizar, adicionar, mais): sem borda, realce no hover.
+/// Header icon (refresh, add, more): no border, highlight on hover.
 struct IconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         IconButtonBody(configuration: configuration)
@@ -430,7 +430,7 @@ private struct IconButtonBody: View {
     }
 }
 
-/// Texto clicável de ações discretas (iniciar todos, abrir log completo, voltar).
+/// Clickable text for low-key actions (start all, open full log, back).
 struct TextButtonStyle: ButtonStyle {
     var accent = false
     var size: CGFloat = 12.5
@@ -462,7 +462,7 @@ private struct TextButtonBody: View {
     }
 }
 
-/// Filtro Todos / Rodando / Parados.
+/// All / Running / Stopped filter.
 struct SegmentedFilter: View {
     @Binding var selection: StatusFilter
     @Environment(\.theme) private var theme

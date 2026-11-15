@@ -8,9 +8,9 @@ public struct ProcSample: Sendable {
     public var uid: UInt32
     public var name: String
     public var startTime: Date
-    /// Memória como o Monitor de Atividade mostra (phys_footprint), em bytes.
+    /// Memory as Activity Monitor shows it (phys_footprint), in bytes.
     public var footprint: UInt64
-    /// Tempo de CPU acumulado (usuário + sistema), em nanossegundos.
+    /// Accumulated CPU time (user + system), in nanoseconds.
     public var cpuNanos: UInt64
 }
 
@@ -84,7 +84,7 @@ public enum ProcScanner {
         return String(cString: buf)
     }
 
-    /// Pasta de trabalho atual do processo.
+    /// The process's current working directory.
     public static func cwd(pid: Int32) -> String? {
         var info = proc_vnodepathinfo()
         let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
@@ -93,7 +93,7 @@ public enum ProcScanner {
         return path.isEmpty ? nil : path
     }
 
-    /// Portas TCP em LISTEN abertas pelo processo.
+    /// TCP ports in LISTEN opened by the process.
     public static func listeningTCPPorts(pid: Int32) -> [Int] {
         let bytes = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
         guard bytes > 0 else { return [] }
@@ -118,13 +118,13 @@ public enum ProcScanner {
     }
 }
 
-/// Foto de todos os processos num instante: árvore, memória, CPU e portas.
+/// Snapshot of all processes at one instant: tree, memory, CPU and ports.
 public struct ProcSnapshot: Sendable {
     public var time: Date
     public var procs: [Int32: ProcSample]
     public var children: [Int32: [Int32]]
     public var groups: [Int32: [Int32]]
-    /// Só processos do usuário atual.
+    /// Only the current user's processes.
     public var listening: [Int32: [Int]]
     public var paths: [Int32: String]
     public var cwds: [Int32: String]
@@ -154,7 +154,7 @@ public struct ProcSnapshot: Sendable {
         return ProcSnapshot(time: Date(), procs: procs, children: children, groups: groups, listening: listening, paths: paths, cwds: cwds)
     }
 
-    /// O processo, seus descendentes e quem está no mesmo grupo de processos.
+    /// The process, its descendants and anything in the same process group.
     public func tree(of root: Int32) -> [Int32] {
         var out = Set<Int32>()
         var stack: [Int32] = [root]
@@ -171,7 +171,7 @@ public struct ProcSnapshot: Sendable {
         Set(listening.values.flatMap { $0 })
     }
 
-    /// Só os descendentes (sem olhar o grupo de processos).
+    /// Only the descendants (ignoring the process group).
     public func descendants(of root: Int32) -> [Int32] {
         var out = Set<Int32>()
         var stack: [Int32] = [root]
@@ -185,8 +185,8 @@ public struct ProcSnapshot: Sendable {
 
     private static let shells: Set<String> = ["zsh", "bash", "sh", "fish", "login", "tmux", "screen", "launchd", "-zsh", "-bash"]
 
-    /// Sobe pela árvore enquanto o pai roda na mesma pasta e não é um shell
-    /// (ex.: next-server → node → npm), para medir o serviço inteiro.
+    /// Walks up the tree while the parent runs in the same folder and isn't a shell
+    /// (e.g. next-server → node → npm), to measure the whole service.
     public func serviceRoot(from pid: Int32, cwd: String) -> Int32 {
         var current = pid
         let me = getuid()

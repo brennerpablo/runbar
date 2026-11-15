@@ -53,7 +53,7 @@ struct ServiceDetailView: View {
         }
     }
 
-    // MARK: - Cabeçalho e ações
+    // MARK: - Header and actions
 
     private func header(_ d: ServiceDisplay) -> some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -129,9 +129,9 @@ struct ServiceDetailView: View {
         .controlSize(.regular)
     }
 
-    // MARK: - Números
+    // MARK: - Numbers
 
-    /// Seis números num cartão só, três por linha.
+    /// Six numbers in one card, three per row.
     private func facts(_ d: ServiceDisplay) -> some View {
         let ext = runtime.external
         let started = d.isExternal ? ext?.startedAt : runtime.startedAt
@@ -140,7 +140,7 @@ struct ServiceDetailView: View {
         let uptime = started.map { Format.duration(model.now.timeIntervalSince($0)) } ?? "—"
         let items: [(String, String)]
         if d.isExternal {
-            // Sem histórico nem log: memória e CPU entram aqui.
+            // No history or log: memory and CPU go here instead.
             items = [
                 ("Port", d.portLabel ?? "—"), ("PID", pid.map(String.init) ?? "—"), ("Memory", d.memory.map { Format.memory($0) } ?? "—"),
                 ("CPU", d.cpu.map { Format.cpu($0) } ?? "—"), ("Since", since), ("Uptime", uptime),
@@ -198,7 +198,7 @@ struct ServiceDetailView: View {
         }
     }
 
-    // MARK: - Comando, pasta e saída
+    // MARK: - Command, folder and output
 
     private var command: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -248,7 +248,7 @@ struct ServiceDetailView: View {
                 }
                 .padding(.horizontal, Layout.rowInset)
                 .frame(height: 38)
-                // Com muitos editores instalados a fileira rola em vez de estourar o painel.
+                // With many editors installed the row scrolls instead of overflowing the panel.
                 ScrollView(.horizontal) {
                     HStack(spacing: 6) {
                         Button("Finder") {
@@ -322,9 +322,9 @@ struct ServiceDetailView: View {
     }
 }
 
-// MARK: - Histórico em barras com leitura ao passar o mouse
+// MARK: - Bar history with a hover readout
 
-/// Trinta barras para os últimos 30 minutos; a de agora vem na cor do app.
+/// Thirty bars for the last 30 minutes; the current one uses the app color.
 private struct BarHistory: View {
     @Environment(\.theme) private var theme
     let title: String
@@ -340,7 +340,7 @@ private struct BarHistory: View {
         let buckets = Metrics.buckets(points, count: Self.slots)
         let scale = Metrics.scale(buckets.map(\.value), floorAtZero: floorAtZero)
         let hovered = hover.flatMap { buckets.indices.contains($0) ? $0 : nil }
-        // Sem o mouse em cima, o número é a última amostra (a barra é a média do minuto).
+        // Without hover, the number is the latest sample (the bar is the minute's average).
         let value = hovered.map { buckets[$0].value } ?? points.last?.value ?? 0
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
@@ -353,7 +353,7 @@ private struct BarHistory: View {
             }
             GeometryReader { geo in
                 let width = (geo.size.width - Self.gap * CGFloat(Self.slots - 1)) / CGFloat(Self.slots)
-                // As barras encostam na direita: "agora" fica sempre na borda, mesmo com pouco histórico.
+                // Bars hug the right edge: "now" is always at the edge, even with little history.
                 let lead = geo.size.width - (CGFloat(buckets.count) * (width + Self.gap) - Self.gap)
                 HStack(alignment: .bottom, spacing: Self.gap) {
                     ForEach(Array(buckets.enumerated()), id: \.offset) { index, bucket in
@@ -406,7 +406,7 @@ private struct BarHistory: View {
     }
 }
 
-// MARK: - Editores e terminais instalados
+// MARK: - Installed editors and terminals
 
 enum Editors {
     struct App {

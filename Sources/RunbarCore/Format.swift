@@ -57,10 +57,10 @@ public enum Format {
         return f
     }()
 
-    /// 2 nov 2026 11:39:36
+    /// Nov 2 2026 11:39:36
     public static func stamp(_ date: Date) -> String { stampFormatter.string(from: date) }
 
-    /// 12:18 hoje, "1 nov 18:02" em outros dias.
+    /// 12:18 today, "Nov 1 18:02" on other days.
     public static func clock(_ date: Date, now: Date = Date()) -> String {
         if Calendar.current.isDate(date, inSameDayAs: now) { return timeFormatter.string(from: date) }
         return dayTimeFormatter.string(from: date)
@@ -72,7 +72,7 @@ public enum TerminalText {
         pattern: #"\x1B\[[0-?]*[ -/]*[@-~]|\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)|\x1B[@-Z\\\-_]"#
     )
 
-    /// Remove cores e códigos de controle do terminal.
+    /// Strips terminal colors and control codes.
     public static func clean(_ s: String) -> String {
         var out = s
         if out.contains("\u{1B}") {
@@ -84,7 +84,7 @@ public enum TerminalText {
         return out
     }
 
-    /// Divide um bloco de saída em linhas, tratando \r como quebra (barras de progresso).
+    /// Splits a block of output into lines, treating \r as a line break (progress bars).
     public static func lines(from text: String) -> [String] {
         text.replacingOccurrences(of: "\r\n", with: "\n")
             .split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" })

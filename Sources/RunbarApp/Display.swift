@@ -7,7 +7,7 @@ enum FixAction: Equatable {
     case takeOverExternal
 }
 
-/// O que a interface mostra para um serviço, calculado a partir do estado.
+/// What the UI shows for a service, derived from its state.
 struct ServiceDisplay {
     enum Dot { case running, busy, stopped, warning, error }
     enum Action { case start, stop, retry }
@@ -27,7 +27,7 @@ struct ServiceDisplay {
     var portLabel: String?
     var url: URL?
     var banner: String?
-    /// Aviso neutro (não é problema), como a porta trocada pelo autoPort.
+    /// Neutral notice (not a problem), such as the port autoPort switched to.
     var info: String?
     var fix: FixAction?
     var fixLabel: String?

@@ -33,7 +33,7 @@ func pad(_ s: String, _ width: Int) -> String {
     s.count >= width ? s + " " : s + String(repeating: " ", count: width - s.count)
 }
 
-/// Conecta no app; se ele estiver fechado, abre e espera o socket.
+/// Connects to the app; if it is closed, opens it and waits for the socket.
 func ensureApp() {
     if ControlClient.ping() { return }
     let open = Process()

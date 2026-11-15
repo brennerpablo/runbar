@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Acompanha um arquivo de log e entrega linhas novas (limpas) na main queue.
+/// Follows a log file and delivers new (cleaned) lines on the main queue.
 public final class LogTailer {
     public let url: URL
     private var offset: UInt64
@@ -55,7 +55,7 @@ public final class LogTailer {
         source = src
     }
 
-    /// Lê o que foi escrito desde a última leitura.
+    /// Reads what was written since the last read.
     public func poll() {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return }
         defer { try? handle.close() }
@@ -88,7 +88,7 @@ public final class LogTailer {
         if !lines.isEmpty { onLines(lines) }
     }
 
-    /// Últimas `count` linhas de um arquivo de log (para o CLI e o backlog).
+    /// Last `count` lines of a log file (for the CLI and the backlog).
     public static func lastLines(of url: URL, count: Int, maxBytes: UInt64 = 1_000_000) -> [String] {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
         defer { try? handle.close() }

@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Testa se uma porta TCP está ocupada tentando um bind nela (IPv4 e IPv6), sem SO_REUSEADDR.
+/// Tests whether a TCP port is taken by trying to bind it (IPv4 and IPv6), without SO_REUSEADDR.
 public enum PortProbe {
     public static func isInUse(_ port: Int) -> Bool {
         guard (1...65535).contains(port) else { return false }

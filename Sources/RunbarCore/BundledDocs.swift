@@ -1,6 +1,6 @@
 import Foundation
 
-/// Arquivos que o app mantém em ~/.config/runbar ao lado do config.json.
+/// Files the app keeps in ~/.config/runbar next to config.json.
 public enum BundledDocs {
     public static let schema = #"""
 {

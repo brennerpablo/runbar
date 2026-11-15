@@ -1,7 +1,7 @@
 #!/bin/bash
-# Compila o Runbar e monta build/Runbar.app.
-#   scripts/build-app.sh            só compila
-#   scripts/build-app.sh --install  instala em ~/Applications, liga o comando `runbar` e abre o app
+# Builds Runbar and assembles build/Runbar.app.
+#   scripts/build-app.sh            build only
+#   scripts/build-app.sh --install  install to ~/Applications, link the `runbar` command and open the app
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -9,7 +9,7 @@ BUNDLE_ID="dev.runbar.Runbar"
 VERSION="0.1.0"
 CONFIG="${CONFIG:-release}"
 
-echo "→ compilando ($CONFIG)…"
+echo "→ building ($CONFIG)…"
 swift build -c "$CONFIG" --product RunbarApp
 swift build -c "$CONFIG" --product runbar
 BIN="$(swift build -c "$CONFIG" --show-bin-path)"
@@ -48,17 +48,17 @@ echo "✓ $APP"
 if [[ "${1:-}" == "--install" ]]; then
   DEST="$HOME/Applications/Runbar.app"
   mkdir -p "$HOME/Applications"
-  # SIGTERM direto: o app fecha sem parar os serviços e o novo processo readota todos.
+  # Plain SIGTERM: the app quits without stopping services, and the new process re-adopts them all.
   pkill -x Runbar 2>/dev/null && sleep 1 || true
   rm -rf "$DEST"
   cp -R "$APP" "$DEST"
-  echo "✓ instalado em $DEST"
+  echo "✓ installed at $DEST"
 
   for dir in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do
     if [[ -d "$dir" && -w "$dir" ]]; then
       if [[ -e "$dir/runbar" && ! -L "$dir/runbar" ]]; then continue; fi
       ln -sf "$DEST/Contents/Helpers/runbar" "$dir/runbar"
-      echo "✓ comando runbar em $dir/runbar"
+      echo "✓ runbar command at $dir/runbar"
       break
     fi
   done

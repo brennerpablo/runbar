@@ -63,13 +63,13 @@ final class AppModel {
     @ObservationIgnored var stopServicesOnQuit = true
     @ObservationIgnored private let scanQueue = DispatchQueue(label: "runbar.scan", qos: .utility)
 
-    /// Usado pelo modo --snapshot para desenhar os dois visuais.
+    /// Used by --snapshot mode to draw both looks.
     var lookOverride: LookSetting?
     @ObservationIgnored var snapshotMode = false
 
     var theme: Theme { Theme.resolve(lookOverride ?? config.settings.look) }
 
-    /// Modo --snapshot: lê config e processos sem abrir socket, sem observar arquivos e sem mexer em serviços.
+    /// --snapshot mode: reads config and processes without opening the socket, watching files or touching services.
     func prepareForSnapshot() {
         snapshotMode = true
         reloadConfig(force: true)
@@ -81,13 +81,13 @@ final class AppModel {
         now = Date()
     }
 
-    // MARK: - Início e fim
+    // MARK: - Start and stop
 
     func start() {
         guard !started else { return }
         started = true
         if ControlClient.ping(timeout: 0.5) {
-            // Já tem um Runbar aberto: este sai.
+            // Another Runbar is already open: this one quits.
             NSApp.terminate(nil)
             return
         }
@@ -179,7 +179,7 @@ final class AppModel {
         watchConfigFile()
     }
 
-    /// Edições no próprio arquivo não mexem na pasta; por isso o arquivo também é observado.
+    /// Edits to the file itself don't touch the folder, so the file is watched too.
     private func watchConfigFile() {
         fileSource?.cancel()
         fileSource = nil
@@ -217,7 +217,7 @@ final class AppModel {
         reloadConfig(force: true)
     }
 
-    // MARK: - Ações
+    // MARK: - Actions
 
     func toggle(_ id: String) {
         guard let rt = runtimes[id] else { return }
@@ -240,7 +240,7 @@ final class AppModel {
         }
     }
 
-    /// Para quem segura a porta e (re)inicia o serviço.
+    /// Stops whoever holds the port and (re)starts the service.
     func perform(_ fix: FixAction, for rt: ServiceRuntime) {
         switch fix {
         case .stopService(let blockerID):
@@ -264,7 +264,7 @@ final class AppModel {
                 }
                 if !blocked { break }
             }
-            // Espera a porta liberar de fato antes de subir.
+            // Wait until the port is actually free before starting.
             if let port = self.runtimes[target]?.config.port {
                 for _ in 0..<40 where PortProbe.isInUse(port) {
                     try? await Task.sleep(for: .milliseconds(250))
@@ -275,7 +275,7 @@ final class AppModel {
         }
     }
 
-    /// Próxima porta livre depois de `port`, pulando as reservadas para outros serviços do config.
+    /// Next free port after `port`, skipping ports reserved for other services in the config.
     func nextFreePort(after port: Int, for id: String) -> Int? {
         var reserved = Set(config.services.filter { $0.id != id }.compactMap(\.port))
         for rt in runtimes.values where rt.id != id {
@@ -298,7 +298,7 @@ final class AppModel {
         tick()
     }
 
-    // MARK: - Monitoramento
+    // MARK: - Monitoring
 
     private func tick() {
         now = Date()
@@ -333,7 +333,7 @@ final class AppModel {
         }
         let me = getpid()
 
-        // Serviços iniciados fora do Runbar: alguém escutando numa porta, rodando na pasta do serviço.
+        // Services started outside Runbar: something listening on a port, running in the service's folder.
         var byCwd: [String: [Int32]] = [:]
         for pid in snap.listening.keys.sorted() where managed[pid] == nil && pid != me {
             guard let cwd = snap.cwds[pid], !(snap.paths[pid] ?? "").contains(".app/Contents/") else { continue }
@@ -396,7 +396,7 @@ final class AppModel {
         }
     }
 
-    // MARK: - Estado entre execuções
+    // MARK: - State across launches
 
     func persistState() {
         guard !snapshotMode else { return }
@@ -435,7 +435,7 @@ final class AppModel {
         persistState()
     }
 
-    // MARK: - Notificações
+    // MARK: - Notifications
 
     func serviceCrashed(_ rt: ServiceRuntime) {
         guard config.settings.notifyOnCrash, Bundle.main.bundleIdentifier != nil else { return }
@@ -452,7 +452,7 @@ final class AppModel {
         }
     }
 
-    // MARK: - Socket do CLI
+    // MARK: - CLI socket
 
     private func startControlServer() {
         let server = ControlServer { [weak self] request, reply in
@@ -536,13 +536,13 @@ final class AppModel {
         }
     }
 
-    // MARK: - Resumo para a interface
+    // MARK: - Summary for the UI
 
     var runningCount: Int { runtimes.values.filter(\.isRunningAnywhere).count }
     var isBusy: Bool { runtimes.values.contains { $0.phase == .starting || $0.phase == .stopping } }
     var alertCount: Int { runtimes.values.filter { display($0).alert }.count + (configError == nil ? 0 : 1) }
 
-    /// Memória somada de tudo que está rodando, inclusive o que foi iniciado fora do Runbar.
+    /// Total memory of everything running, including services started outside Runbar.
     var totalMemory: UInt64 {
         runtimes.values.filter(\.isRunningAnywhere).reduce(0) { $0 + ($1.external?.memory ?? $1.memory) }
     }
@@ -551,12 +551,12 @@ final class AppModel {
         runtimes.values.filter(\.isRunningAnywhere).reduce(0) { $0 + ($1.external?.cpu ?? $1.cpu) }
     }
 
-    /// Serviços com alerta, na ordem em que aparecem na lista.
+    /// Services with an alert, in list order.
     var alertingServices: [ServiceRuntime] {
         groups.flatMap(\.runtimes).filter { display($0).alert }
     }
 
-    /// Histórico somado dos serviços vivos. Todos são amostrados no mesmo instante, então a soma é por data.
+    /// Summed history of live services. They are all sampled at the same instant, so the sum is per date.
     func totalHistory(_ history: KeyPath<ServiceRuntime, [MetricPoint]>) -> [MetricPoint] {
         var sums: [Date: Double] = [:]
         for rt in runtimes.values where rt.isAlive {
@@ -565,7 +565,7 @@ final class AppModel {
         return sums.keys.sorted().enumerated().map { MetricPoint(id: $0.offset, date: $0.element, value: sums[$0.element] ?? 0) }
     }
 
-    // MARK: - Utilidades
+    // MARK: - Utilities
 
     func openConfigFile() {
         NSWorkspace.shared.open(Paths.configFile)
@@ -615,7 +615,7 @@ final class AppModel {
         return "Couldn't find a writable folder on your PATH."
     }
 
-    /// Pasta-mãe comum dos projetos, para o pedido ao agente.
+    /// Common parent folder of the projects, for the agent request.
     var suggestedRoot: String {
         let roots = config.projects.compactMap(\.root)
         if roots.count > 1 {

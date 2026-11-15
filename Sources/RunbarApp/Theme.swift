@@ -2,7 +2,7 @@ import AppKit
 import RunbarCore
 import SwiftUI
 
-/// Os dois visuais do app. Mesmo layout e mesmas cores; muda só o fundo do painel (opaco ou vidro).
+/// The app's two looks. Same layout and colors; only the panel background changes (opaque or glass).
 struct Theme: Equatable {
     var glass: Bool
 
@@ -16,7 +16,7 @@ struct Theme: Equatable {
         }
     }
 
-    /// Margem lateral única do painel: cabeçalho, blocos, cartões e busca alinham nela.
+    /// The panel's single side margin: header, tiles, cards and search all align to it.
     var gutter: CGFloat { 14 }
     var cardRadius: CGFloat { 14 }
     var controlRadius: CGFloat { 9 }
@@ -25,7 +25,7 @@ struct Theme: Equatable {
     var logRadius: CGFloat { 12 }
 }
 
-/// Medidas fixas, para que linhas, botões e pílulas fiquem alinhados em qualquer estado.
+/// Fixed sizes, so rows, buttons and pills line up in every state.
 enum Layout {
     static let width: CGFloat = 400
     static let panelRadius: CGFloat = 22
@@ -53,7 +53,7 @@ extension EnvironmentValues {
 }
 
 extension Color {
-    /// Cor que muda entre o modo claro e o escuro.
+    /// Color that differs between light and dark mode.
     static func rb(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
@@ -72,27 +72,27 @@ extension Color {
     private static func white(_ alpha: CGFloat) -> NSColor { NSColor(white: 1, alpha: alpha) }
     private static func ink(_ alpha: CGFloat) -> NSColor { hex(0x0D141E, alpha) }
 
-    // Texto: secundário e apagado passam contraste sobre o painel e sobre os cartões.
+    // Text: secondary and muted both pass contrast on the panel and on cards.
     static let rbText2 = rb(light: hex(0x454D59), dark: hex(0xB4BBC7))
     static let rbText3 = rb(light: hex(0x555D6A), dark: hex(0xA0A8B5))
-    /// Nome de serviço parado: um degrau abaixo do texto principal.
+    /// Stopped service name: one step below primary text.
     static let rbTextDim = rb(light: hex(0x2F3742), dark: hex(0xD5DAE2))
 
-    // "No ar": a cor do app. Texto e ícone usam `rbLive`; pontos e barras usam `rbLiveFill`.
+    // "Live": the app's color. Text and icons use `rbLive`; dots and bars use `rbLiveFill`.
     static let rbLive = rb(light: hex(0x086B3C), dark: hex(0x4ADE9A))
     static let rbLiveFill = rb(light: hex(0x17A865), dark: hex(0x4ADE9A))
     static let rbLiveSoft = rb(light: hex(0x17A865, 0.13), dark: hex(0x4ADE9A, 0.14))
-    /// Botão principal: fundo verde com texto escuro nos dois modos.
+    /// Primary button: green fill with dark text in both modes.
     static let rbPrimary = rb(light: hex(0x3DD68C), dark: hex(0x4ADE9A))
     static let rbOnPrimary = Color(nsColor: hex(0x06281A))
 
-    // Atenção: laranja de texto que passa contraste nos dois modos.
+    // Attention: an orange that passes text contrast in both modes.
     static let rbWarn = rb(light: hex(0xA84205), dark: hex(0xFFB55C))
     static let rbWarnFill = rb(light: hex(0xF2901F), dark: hex(0xFFB55C))
     static let rbWarnSoft = rb(light: hex(0xFF9500, 0.14), dark: hex(0xFFB55C, 0.13))
     static let rbWarnBorder = rb(light: hex(0xD67800, 0.30), dark: hex(0xFFB55C, 0.27))
 
-    // Superfícies sobre o painel.
+    // Surfaces on top of the panel.
     static let rbCardFill = rb(light: white(0.64), dark: white(0.055))
     static let rbCardRaised = rb(light: white(0.90), dark: white(0.10))
     static let rbCardBorder = rb(light: ink(0.07), dark: white(0.07))
@@ -104,22 +104,22 @@ extension Color {
     static let rbBar = rb(light: ink(0.20), dark: white(0.26))
     static let rbSearchField = rb(light: white(0.95), dark: hex(0x323944, 0.94))
 
-    // Painel: opaco no sólido; no vidro, um véu de 84% da mesma cor sobre o desfoque do que está atrás.
+    // Panel: opaque when solid; for glass, an 84% tint of the same color over the blur of what's behind.
     static let rbPanelSolid = rb(light: hex(0xF1F3F6), dark: hex(0x1A1F27))
     static let rbPanelTint = rb(light: hex(0xF0F3F7), dark: hex(0x151A22))
     static let rbPanelBorder = rb(light: white(0.75), dark: white(0.13))
-    /// Reflexo de 1 px na borda de cima.
+    /// 1 px highlight along the top edge.
     static let rbPanelHighlight = rb(light: white(0.85), dark: white(0.09))
 
     static let rbLogBackground = Color(nsColor: hex(0x0B0E13))
 
-    // Usadas pela janela do agente.
+    // Used by the agent window.
     static let rbGreen = Color(nsColor: .systemGreen)
     static let rbOrange = Color(nsColor: .systemOrange)
 }
 
 extension View {
-    /// Cartão que agrupa linhas (projeto, métricas, comando). `raised` é o degrau mais claro.
+    /// Card that groups rows (project, metrics, command). `raised` is the lighter step.
     func rbCard(_ t: Theme, radius: CGFloat? = nil, raised: Bool = false) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius ?? t.cardRadius, style: .continuous)
         return self
@@ -128,12 +128,12 @@ extension View {
             .overlay(shape.strokeBorder(Color.rbCardBorder, lineWidth: 1))
     }
 
-    /// Botões de texto. O tamanho vem do `controlSize` (.small ou .regular).
+    /// Text buttons. Size comes from `controlSize` (.small or .regular).
     func rbButton(_ t: Theme, prominent: Bool = false) -> some View {
         buttonStyle(RBButtonStyle(prominent: prominent))
     }
 
-    /// O painel inteiro: cantos de 22, fundo (vidro ou sólido), borda clara e reflexo no topo.
+    /// The whole panel: 22 pt corners, background (glass or solid), light border and top highlight.
     func rbPanel(_ t: Theme) -> some View {
         let shape = RoundedRectangle(cornerRadius: Layout.panelRadius, style: .circular)
         return self
@@ -162,8 +162,8 @@ private struct PanelBackground: View {
     }
 }
 
-/// Desfoque do que está atrás da janela. O recorte vem do `maskImage`: o desfoque é feito pelo
-/// sistema e não respeita o `clipShape` da view.
+/// Blur of what's behind the window. The shape comes from `maskImage`: the blur is done by the
+/// system and ignores the view's `clipShape`.
 private struct BehindWindowBlur: NSViewRepresentable {
     let radius: CGFloat
 
@@ -192,6 +192,6 @@ private struct BehindWindowBlur: NSViewRepresentable {
 }
 
 extension Theme {
-    /// Cor para onde a lista desbota por baixo da busca flutuante.
+    /// Color the list fades into beneath the floating search.
     var panelFade: Color { glass ? .rbPanelTint : .rbPanelSolid }
 }

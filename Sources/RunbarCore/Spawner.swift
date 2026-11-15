@@ -7,8 +7,8 @@ public struct SpawnError: Error, CustomStringConvertible {
 }
 
 public enum Spawner {
-    /// Sobe `command` num login shell, como líder de um novo grupo de processos,
-    /// com stdout e stderr anexados ao arquivo de log. O processo sobrevive ao Runbar.
+    /// Starts `command` in a login shell, as leader of a new process group,
+    /// with stdout and stderr appended to the log file. The process outlives Runbar.
     public static func spawn(shell: String, command: String, cwd: String, environment: [String: String], logPath: String) throws -> pid_t {
         var fileActions: posix_spawn_file_actions_t?
         posix_spawn_file_actions_init(&fileActions)
@@ -44,19 +44,19 @@ public enum Spawner {
         return pid
     }
 
-    /// Sinal para o grupo inteiro (o serviço e os filhos).
+    /// Signals the whole group (the service and its children).
     public static func signalGroup(_ pgid: pid_t, _ sig: Int32) {
         guard pgid > 1 else { return }
         kill(-pgid, sig)
     }
 
-    /// Decodifica o status do waitpid em código de saída (128+sinal quando morto por sinal).
+    /// Decodes a waitpid status into an exit code (128+signal when killed by a signal).
     public static func exitCode(fromWaitStatus status: Int32) -> Int32 {
         if status & 0x7F == 0 { return (status >> 8) & 0xFF }
         return 128 + (status & 0x7F)
     }
 
-    /// Lê um arquivo KEY=valor (aceita `export`, comentários e aspas).
+    /// Reads a KEY=value file (accepts `export`, comments and quotes).
     public static func parseEnvFile(_ path: String) -> [String: String] {
         guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [:] }
         var out: [String: String] = [:]

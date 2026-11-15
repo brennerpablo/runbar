@@ -1,6 +1,6 @@
 import Foundation
 
-/// Posição (1-based) de um trecho no arquivo JSON.
+/// Position (1-based) of a span in the JSON file.
 public struct JSONPosition: Equatable, Sendable {
     public var line: Int
     public var column: Int
@@ -10,7 +10,7 @@ public struct JSONPosition: Equatable, Sendable {
     }
 }
 
-/// Objeto JSON que preserva a ordem das chaves (a ordem do arquivo é a ordem do menu).
+/// JSON object that preserves key order (file order is menu order).
 public struct JSONObject: Equatable, Sendable {
     public struct Entry: Equatable, Sendable {
         public var key: String
@@ -58,7 +58,7 @@ public indirect enum JSON: Equatable, Sendable {
     public var arrayValue: [JSON]? { if case .array(let a) = self { return a }; return nil }
     public var isNull: Bool { if case .null = self { return true }; return false }
 
-    /// Nome do tipo em português, para mensagens de erro.
+    /// Type name for error messages.
     public var typeName: String {
         switch self {
         case .null: return "null"
@@ -78,7 +78,7 @@ public struct JSONParseError: Error, Equatable, Sendable, CustomStringConvertibl
     public var description: String { "line \(line), column \(column): \(message)" }
 }
 
-/// Parser JSON estrito, com mensagens em português e linha/coluna exatas.
+/// Strict JSON parser with exact line/column in its messages.
 public struct JSONParser {
     private let b: [UInt8]
     private var i = 0
@@ -302,7 +302,7 @@ public struct JSONParser {
     }
 }
 
-// MARK: - Serialização (2 espaços, igual ao JSON.stringify(obj, null, 2))
+// MARK: - Serialization (2 spaces, same as JSON.stringify(obj, null, 2))
 
 public extension JSON {
     func prettyPrinted() -> String {

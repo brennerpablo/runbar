@@ -29,19 +29,19 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
     public var projectID: String
     public var projectName: String
     public var command: String
-    /// Pasta absoluta onde o comando roda.
+    /// Absolute folder the command runs in.
     public var cwd: String
     public var port: Int?
     public var type: ServiceType
     public var open: String?
     public var env: [String: String]
-    /// Caminho absoluto do arquivo de variáveis.
+    /// Absolute path of the env file.
     public var envFile: String?
     public var health: String?
     public var autostart: Bool
     public var restart: RestartPolicy
     public var stop: String?
-    /// Se a porta estiver ocupada, sobe na próxima livre.
+    /// If the port is taken, start on the next free one.
     public var autoPort: Bool
 
     public init(
@@ -67,19 +67,19 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
         self.autoPort = autoPort
     }
 
-    /// Comando com `{port}` trocado pela porta em que o serviço vai subir.
+    /// Command with `{port}` replaced by the port the service will start on.
     public func command(port launchPort: Int?) -> String {
         guard let p = launchPort ?? port else { return command }
         return command.replacingOccurrences(of: "{port}", with: String(p))
     }
 
-    /// Muda quando algo que exige reiniciar o processo muda.
+    /// Changes when anything that requires restarting the process changes.
     public var launchSignature: String {
         let envPart = env.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "\u{1}")
         return [command, cwd, String(port ?? 0), envPart, envFile ?? ""].joined(separator: "\u{0}")
     }
 
-    /// URL do botão "Abrir". `{port}` vira a porta real.
+    /// URL for the "Open" button. `{port}` becomes the actual port.
     public func url(port realPort: Int?) -> URL? {
         let p = realPort ?? port
         if let open {
@@ -103,7 +103,7 @@ public struct SettingsConfig: Sendable, Equatable {
     public var look: LookSetting = .auto
     public var shell: String = "/bin/zsh"
     public var notifyOnCrash: Bool = true
-    /// Padrão de autoPort para os serviços que não definem o próprio.
+    /// Default autoPort for services that don't set their own.
     public var autoPort: Bool = false
     public init() {}
 }
@@ -174,7 +174,7 @@ public enum ConfigLoader {
     }
 }
 
-/// Edições pontuais feitas pela interface: mantêm a ordem e os campos que o app não conhece.
+/// Targeted edits made from the UI: they keep key order and fields the app doesn't know about.
 public enum ConfigEditor {
     public enum EditError: Error { case notAnObject }
 
@@ -199,7 +199,7 @@ public enum ConfigEditor {
     }
 }
 
-// MARK: - Validação
+// MARK: - Validation
 
 struct ConfigValidator {
     var issues: [ConfigIssue] = []

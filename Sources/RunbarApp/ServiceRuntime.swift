@@ -25,7 +25,7 @@ struct LogLine: Identifiable, Equatable {
     }
 }
 
-/// Serviço que está rodando, mas foi iniciado fora do Runbar (ex.: no Terminal).
+/// A service that is running but was started outside Runbar (e.g. in Terminal).
 struct ExternalRun: Equatable {
     var rootPID: Int32
     var pids: Set<Int32>
@@ -41,7 +41,7 @@ struct MetricPoint: Identifiable, Equatable {
     let value: Double
 }
 
-/// Estado vivo de um serviço: processo, log, portas, memória e CPU.
+/// Live state of a service: process, log, ports, memory and CPU.
 @MainActor @Observable
 final class ServiceRuntime: Identifiable {
     enum Phase: Equatable {
@@ -69,7 +69,7 @@ final class ServiceRuntime: Identifiable {
     private(set) var cpuHistory: [MetricPoint] = []
     private(set) var appliedSignature: String?
     private(set) var gaveUpRestarting = false
-    /// Porta com que o processo foi iniciado; `fallbackFrom` é a configurada, quando o autoPort trocou.
+    /// Port the process was started with; `fallbackFrom` is the configured one when autoPort switched.
     private(set) var activePort: Int?
     private(set) var fallbackFrom: Int?
     var healthy: Bool?
@@ -107,13 +107,13 @@ final class ServiceRuntime: Identifiable {
     var logURL: URL { Paths.logFile(for: id) }
     var needsRestart: Bool { isAlive && appliedSignature != nil && appliedSignature != config.launchSignature }
 
-    /// Porta em que o serviço realmente está escutando.
+    /// Port the service is actually listening on.
     var realPort: Int? {
         if let p = expectedPort, listening.contains(p) { return p }
         return listening.first
     }
 
-    /// A porta em que o serviço deveria estar: a escolhida na hora de subir, ou a do config.
+    /// Port the service should be on: the one chosen at start, or the configured one.
     var expectedPort: Int? { activePort ?? config.port }
 
     var lastLine: String? { logs.last(where: { $0.kind != .meta })?.text }
@@ -123,7 +123,7 @@ final class ServiceRuntime: Identifiable {
         if newConfig != config { config = newConfig }
     }
 
-    // MARK: - Ciclo de vida
+    // MARK: - Lifecycle
 
     func start() {
         guard !isAlive else { return }
@@ -135,8 +135,8 @@ final class ServiceRuntime: Identifiable {
             phase = .failed("folder \(Paths.abbreviate(cfg.cwd)) does not exist")
             return
         }
-        // O Runbar exporta PORT: com a porta ocupada o servidor só cairia.
-        // Com autoPort, sobe na próxima livre; sem, avisa antes de tentar.
+        // Runbar exports PORT: with the port taken the server would just crash.
+        // With autoPort, start on the next free one; without it, warn before trying.
         var launchPort = cfg.port
         var fallback: Int?
         if let port = cfg.port, cfg.type != .docker, PortProbe.isInUse(port) {
@@ -170,7 +170,7 @@ final class ServiceRuntime: Identifiable {
         }
     }
 
-    /// Retoma um processo que já estava rodando (o Runbar foi reiniciado).
+    /// Re-adopts a process that was already running (Runbar was restarted).
     func adopt(pid: Int32, startedAt: Date, processStart: Double, signature: String, activePort: Int?) {
         guard !isAlive else { return }
         self.processStart = processStart
@@ -219,7 +219,7 @@ final class ServiceRuntime: Identifiable {
         }
     }
 
-    /// Encerra na hora (Runbar saindo).
+    /// Terminates immediately (Runbar quitting).
     func terminateNow() {
         guard let pid else { return }
         userStopped = true
@@ -273,7 +273,7 @@ final class ServiceRuntime: Identifiable {
         exitSource = nil
         killWork?.cancel()
         killWork = nil
-        // Limpa o que sobrou no grupo (servidores filhos que ainda seguram a porta).
+        // Clean up what's left in the group (child servers still holding the port).
         Spawner.signalGroup(pid, SIGTERM)
         for p in treePIDs where p != pid { kill(p, SIGTERM) }
         tailer?.poll()
@@ -392,7 +392,7 @@ final class ServiceRuntime: Identifiable {
         return env
     }
 
-    // MARK: - Métricas
+    // MARK: - Metrics
 
     func apply(_ snap: ProcSnapshot, sampleHistory: Bool, portOpenAnywhere: Bool) {
         guard let pid else { return }
@@ -459,7 +459,7 @@ final class ServiceRuntime: Identifiable {
         if run != external { external = run }
     }
 
-    /// Para um serviço que foi iniciado fora do Runbar.
+    /// Stops a service that was started outside Runbar.
     func stopExternal() {
         guard let e = external else { return }
         for p in e.pids { kill(p, SIGTERM) }

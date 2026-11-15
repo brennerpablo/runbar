@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Igual ao `@State`. No SDK do macOS 27, `@State` virou macro e o plugin dela só vem com o Xcode;
-/// este wrapper usa o tipo `State` direto, então o projeto compila só com o Command Line Tools.
+/// Same as `@State`. In the macOS 27 SDK `@State` became a macro whose plugin only ships with Xcode;
+/// this wrapper uses the `State` type directly, so the project builds with just the Command Line Tools.
 @propertyWrapper
 struct ViewState<Value>: DynamicProperty {
     private var storage: State<Value>
