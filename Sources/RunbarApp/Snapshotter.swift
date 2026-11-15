@@ -29,7 +29,7 @@ enum Snapshotter {
         exit(0)
     }
 
-    /// Fora da tela não existe o material do sistema: no vidro, simula papel de parede + painel translúcido.
+    /// Fora da tela não existe desfoque: no vidro, simula um papel de parede atrás do véu do painel.
     @ViewBuilder
     private static func backdrop<V: View>(_ view: V, glass: Bool, dark: Bool) -> some View {
         if glass {
@@ -38,7 +38,6 @@ enum Snapshotter {
                     Color(red: 0.55, green: 0.62, blue: 0.72)
                     Circle().fill(Color(red: 0.61, green: 0.76, blue: 0.93)).frame(width: 420).offset(x: -170, y: -120)
                     Circle().fill(Color(red: 0.96, green: 0.75, blue: 0.6)).frame(width: 460).offset(x: 190, y: 260)
-                    Color(white: dark ? 0.1 : 0.98).opacity(dark ? 0.72 : 0.62)
                 }
             }
         } else {

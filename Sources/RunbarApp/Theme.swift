@@ -28,6 +28,7 @@ struct Theme: Equatable {
 /// Medidas fixas, para que linhas, botões e pílulas fiquem alinhados em qualquer estado.
 enum Layout {
     static let width: CGFloat = 400
+    static let panelRadius: CGFloat = 22
     static let rowHeight: CGFloat = 46
     static let rowInset: CGFloat = 12
     static let dot: CGFloat = 8
@@ -103,9 +104,12 @@ extension Color {
     static let rbBar = rb(light: ink(0.20), dark: white(0.26))
     static let rbSearchField = rb(light: white(0.95), dark: hex(0x323944, 0.94))
 
-    // Painel: opaco no sólido; no vidro, um véu da mesma cor sobre o material do sistema.
+    // Painel: opaco no sólido; no vidro, um véu de 84% da mesma cor sobre o desfoque do que está atrás.
     static let rbPanelSolid = rb(light: hex(0xF1F3F6), dark: hex(0x1A1F27))
     static let rbPanelTint = rb(light: hex(0xF0F3F7), dark: hex(0x151A22))
+    static let rbPanelBorder = rb(light: white(0.75), dark: white(0.13))
+    /// Reflexo de 1 px na borda de cima.
+    static let rbPanelHighlight = rb(light: white(0.85), dark: white(0.09))
 
     static let rbLogBackground = Color(nsColor: hex(0x0B0E13))
 
@@ -129,14 +133,61 @@ extension View {
         buttonStyle(RBButtonStyle(prominent: prominent))
     }
 
-    /// Fundo do painel.
-    @ViewBuilder
+    /// O painel inteiro: cantos de 22, fundo (vidro ou sólido), borda clara e reflexo no topo.
     func rbPanel(_ t: Theme) -> some View {
-        if t.glass {
-            self.background(Color.rbPanelTint.opacity(0.55))
+        let shape = RoundedRectangle(cornerRadius: Layout.panelRadius, style: .circular)
+        return self
+            .background { PanelBackground(glass: t.glass) }
+            .clipShape(shape)
+            .overlay {
+                shape.strokeBorder(Color.rbPanelBorder, lineWidth: 1)
+                shape.inset(by: 1)
+                    .stroke(LinearGradient(colors: [.rbPanelHighlight, .clear], startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.05)), lineWidth: 1)
+            }
+    }
+}
+
+private struct PanelBackground: View {
+    let glass: Bool
+
+    var body: some View {
+        if glass {
+            ZStack {
+                BehindWindowBlur(radius: Layout.panelRadius)
+                Color.rbPanelTint.opacity(0.84)
+            }
         } else {
-            self.background(Color.rbPanelSolid)
+            Color.rbPanelSolid
         }
+    }
+}
+
+/// Desfoque do que está atrás da janela. O recorte vem do `maskImage`: o desfoque é feito pelo
+/// sistema e não respeita o `clipShape` da view.
+private struct BehindWindowBlur: NSViewRepresentable {
+    let radius: CGFloat
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .popover
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.maskImage = Self.mask(radius: radius)
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+
+    private static func mask(radius: CGFloat) -> NSImage {
+        let side = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 }
 

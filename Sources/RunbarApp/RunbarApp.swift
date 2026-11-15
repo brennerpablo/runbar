@@ -5,39 +5,18 @@ import SwiftUI
 @main
 struct RunbarMain: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @ViewState private var model = AppModel.shared
 
     var body: some Scene {
-        MenuBarExtra {
-            PopoverView()
-                .environment(model)
-        } label: {
-            MenuBarLabel(model: model)
-        }
-        .menuBarExtraStyle(.window)
-
+        // O ícone da menu bar e o painel ficam em StatusPanel.swift.
         Window("Configurar com um agente", id: "agent") {
             AgentView()
-                .environment(model)
+                .environment(AppModel.shared)
         }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
-    }
-}
 
-struct MenuBarLabel: View {
-    let model: AppModel
-
-    var body: some View {
-        let badge: MenuBarIcon.Badge = model.alertCount > 0 ? .alert : (model.isBusy ? .busy : .none)
-        let count = model.runningCount
-        HStack(spacing: 3) {
-            Image(nsImage: MenuBarIcon.image(badge))
-            if count > 0 {
-                Text("\(count)").monospacedDigit()
-            }
-        }
-        .accessibilityLabel(count == 1 ? "Runbar, 1 serviço rodando" : "Runbar, \(count) serviços rodando")
+        // Sem uma segunda cena o Window seria a única, e o app fecharia junto com a janela do agente.
+        Settings { EmptyView() }
     }
 }
 
@@ -51,7 +30,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         AppModel.shared.start()
+        StatusBarController.shared.install()
     }
+
+    /// O app vive na menu bar: fechar o painel ou a janela do agente não encerra nada.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {
         AppModel.shared.shutdown()

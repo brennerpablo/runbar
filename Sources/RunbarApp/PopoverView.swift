@@ -27,7 +27,6 @@ struct PopoverView: View {
         }
         .frame(width: Layout.width)
         .rbPanel(theme)
-        .background(MenuBarWindowAnchor())
         .environment(\.theme, theme)
         .onAppear {
             prepareExpanded()
