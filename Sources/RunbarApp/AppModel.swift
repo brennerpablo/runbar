@@ -542,16 +542,27 @@ final class AppModel {
     var isBusy: Bool { runtimes.values.contains { $0.phase == .starting || $0.phase == .stopping } }
     var alertCount: Int { runtimes.values.filter { display($0).alert }.count + (configError == nil ? 0 : 1) }
 
-    var summary: String {
-        let running = runtimes.values.filter(\.isRunningAnywhere)
-        var parts = ["\(running.count) de \(config.services.count) rodando"]
-        if !running.isEmpty {
-            parts.append(Format.memory(running.reduce(0) { $0 + ($1.external?.memory ?? $1.memory) }))
-            parts.append(Format.cpu(running.reduce(0) { $0 + ($1.external?.cpu ?? $1.cpu) }) + " CPU")
+    /// Memória somada de tudo que está rodando, inclusive o que foi iniciado fora do Runbar.
+    var totalMemory: UInt64 {
+        runtimes.values.filter(\.isRunningAnywhere).reduce(0) { $0 + ($1.external?.memory ?? $1.memory) }
+    }
+
+    var totalCPU: Double {
+        runtimes.values.filter(\.isRunningAnywhere).reduce(0) { $0 + ($1.external?.cpu ?? $1.cpu) }
+    }
+
+    /// Serviços com alerta, na ordem em que aparecem na lista.
+    var alertingServices: [ServiceRuntime] {
+        groups.flatMap(\.runtimes).filter { display($0).alert }
+    }
+
+    /// Histórico somado dos serviços vivos. Todos são amostrados no mesmo instante, então a soma é por data.
+    func totalHistory(_ history: KeyPath<ServiceRuntime, [MetricPoint]>) -> [MetricPoint] {
+        var sums: [Date: Double] = [:]
+        for rt in runtimes.values where rt.isAlive {
+            for point in rt[keyPath: history] { sums[point.date, default: 0] += point.value }
         }
-        let alerts = runtimes.values.filter { display($0).alert }.count
-        if alerts > 0 { parts.append(alerts == 1 ? "1 alerta" : "\(alerts) alertas") }
-        return parts.joined(separator: " · ")
+        return sums.keys.sorted().enumerated().map { MetricPoint(id: $0.offset, date: $0.element, value: sums[$0.element] ?? 0) }
     }
 
     // MARK: - Utilidades

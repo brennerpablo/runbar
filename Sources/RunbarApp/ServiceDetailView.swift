@@ -1,5 +1,4 @@
 import AppKit
-import Charts
 import RunbarCore
 import SwiftUI
 
@@ -13,21 +12,23 @@ struct ServiceDetailView: View {
     var body: some View {
         let d = model.display(runtime)
         VStack(alignment: .leading, spacing: 0) {
-            Button(action: onBack) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
-                    Text("Serviços").font(.system(size: 13))
+            HStack(alignment: .center, spacing: 8) {
+                Button(action: onBack) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
+                        Text("Serviços")
+                    }
                 }
-                .foregroundStyle(Color.accentColor)
-                .frame(height: Layout.control)
-                .contentShape(Rectangle())
+                .buttonStyle(TextButtonStyle(size: 13))
+                .keyboardShortcut(.cancelAction)
+                Spacer(minLength: 8)
+                statusChip(d)
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .padding(.horizontal, theme.gutter)
-            .padding(.top, 8)
+            .padding(.leading, 6)
+            .padding(.trailing, theme.gutter)
+            .padding(.top, 12)
 
-            AdaptiveScroll(maxHeight: 680) {
+            AdaptiveScroll(maxHeight: 700) {
                 VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
                     header(d)
                     if let banner = d.banner {
@@ -46,7 +47,7 @@ struct ServiceDetailView: View {
                     logs
                 }
                 .padding(.horizontal, theme.gutter)
-                .padding(.top, 8)
+                .padding(.top, 10)
                 .padding(.bottom, theme.gutter)
             }
         }
@@ -55,40 +56,43 @@ struct ServiceDetailView: View {
     // MARK: - Cabeçalho e ações
 
     private func header(_ d: ServiceDisplay) -> some View {
-        HStack(alignment: .top, spacing: Layout.dotGap) {
-            StatusDot(dot: d.dot, size: 9).padding(.top, 6)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(runtime.id)
-                    .font(.system(size: 16, weight: .semibold))
-                    .lineLimit(1)
-                Text("\(runtime.config.projectName) · \(runtime.config.type.label)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(runtime.id)
+                .font(.system(size: 19, weight: .semibold))
+                .tracking(-0.2)
+                .lineLimit(1)
+            Text("\(runtime.config.projectName) · \(runtime.config.type.label)")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.rbText2)
+        }
+    }
+
+    private func statusChip(_ d: ServiceDisplay) -> some View {
+        HStack(spacing: 6) {
+            StatusDot(dot: d.dot, size: 6, halo: false)
             Text(d.statusLabel)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(chipForeground(d))
-                .padding(.horizontal, 9)
-                .frame(height: 20)
-                .background(chipBackground(d), in: Capsule())
-                .padding(.top, 1)
         }
+        .padding(.leading, 8)
+        .padding(.trailing, 10)
+        .frame(height: 22)
+        .background(chipBackground(d), in: Capsule())
     }
 
     private func chipForeground(_ d: ServiceDisplay) -> Color {
         switch d.dot {
-        case .running: return Color(nsColor: .systemGreen)
+        case .running: return .rbLive
         case .warning, .error, .busy: return .rbWarn
-        case .stopped: return .secondary
+        case .stopped: return .rbText2
         }
     }
 
     private func chipBackground(_ d: ServiceDisplay) -> Color {
         switch d.dot {
-        case .running: return Color.rbGreen.opacity(0.15)
-        case .warning, .error, .busy: return Color.rbOrange.opacity(0.15)
-        case .stopped: return Color.primary.opacity(0.07)
+        case .running: return .rbLiveSoft
+        case .warning, .error, .busy: return .rbWarnSoft
+        case .stopped: return .rbControl
         }
     }
 
@@ -98,7 +102,10 @@ struct ServiceDetailView: View {
                 Button {
                     NSWorkspace.shared.open(url)
                 } label: {
-                    Label("Abrir \(url.host ?? "localhost")\(url.port.map { ":\($0)" } ?? "")", systemImage: "arrow.up.right")
+                    HStack(spacing: 6) {
+                        Text("Abrir \(url.host ?? "localhost")\(url.port.map { ":\($0)" } ?? "")")
+                        Image(systemName: "arrow.up.right").font(.system(size: 9.5, weight: .bold))
+                    }
                 }
                 .rbButton(theme, prominent: true)
             }
@@ -111,7 +118,10 @@ struct ServiceDetailView: View {
                 Button {
                     runtime.start()
                 } label: {
-                    Label(d.action == .retry ? "Tentar de novo" : "Iniciar", systemImage: "play.fill")
+                    HStack(spacing: 6) {
+                        Image(systemName: d.action == .retry ? "arrow.clockwise" : "play.fill").font(.system(size: 9.5, weight: .bold))
+                        Text(d.action == .retry ? "Tentar de novo" : "Iniciar")
+                    }
                 }
                 .rbButton(theme, prominent: true)
             }
@@ -121,6 +131,7 @@ struct ServiceDetailView: View {
 
     // MARK: - Números
 
+    /// Seis números num cartão só, três por linha.
     private func facts(_ d: ServiceDisplay) -> some View {
         let ext = runtime.external
         let started = d.isExternal ? ext?.startedAt : runtime.startedAt
@@ -141,36 +152,48 @@ struct ServiceDetailView: View {
                 ("Último log", runtime.lastLogAt.map { Format.ago($0, now: model.now) } ?? "—"),
             ]
         }
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-            ForEach(items, id: \.0) { item in
-                VStack(alignment: .leading, spacing: 4) {
-                    SectionLabel(text: item.0)
-                    Text(item.1)
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+        let rows = [Array(items.prefix(3)), Array(items.dropFirst(3))]
+        return VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                if rowIndex > 0 { Rectangle().fill(Color.rbHairline).frame(height: 1) }
+                HStack(spacing: 0) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, item in
+                        if columnIndex > 0 { Rectangle().fill(Color.rbHairline).frame(width: 1) }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.0)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.rbText2)
+                                .lineLimit(1)
+                            Text(item.1)
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, Layout.rowInset)
+                        .padding(.top, 9)
+                        .padding(.bottom, 10)
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .rbCard(theme)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .rbCard(theme)
     }
 
     @ViewBuilder
     private var charts: some View {
         if runtime.memHistory.count >= 2 {
             HStack(spacing: 8) {
-                Sparkline(title: "Memória", points: runtime.memHistory, floorAtZero: false) { Format.memory(UInt64(max(0, $0))) }
-                Sparkline(title: "CPU", points: runtime.cpuHistory, floorAtZero: true) { Format.cpu($0) }
+                BarHistory(title: "Memória", points: runtime.memHistory, floorAtZero: false) { Format.memory(UInt64(max(0, $0))) }
+                BarHistory(title: "CPU", points: runtime.cpuHistory, floorAtZero: true) { Format.cpu($0) }
             }
         } else {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Coletando memória e CPU. Os gráficos aparecem em alguns segundos.")
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.rbText2)
             }
         }
     }
@@ -179,17 +202,17 @@ struct ServiceDetailView: View {
 
     private var command: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "Comando")
+            SectionLabel(text: "Comando").padding(.leading, 2)
             HStack(spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("$").foregroundStyle(.tertiary)
+                    Text("$").foregroundStyle(Color.rbText3)
                     Text(runtime.config.command(port: runtime.expectedPort))
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                 }
                 .font(.system(size: 12, design: .monospaced))
-                .padding(.vertical, 8)
+                .padding(.vertical, 9)
                 Spacer(minLength: 4)
                 Button(copied ? "Copiado" : "Copiar") {
                     Pasteboard.copy(runtime.config.command(port: runtime.expectedPort))
@@ -199,43 +222,62 @@ struct ServiceDetailView: View {
                 .rbButton(theme)
                 .controlSize(.small)
             }
-            .padding(.leading, 10)
-            .padding(.trailing, 6)
-            .frame(minHeight: 34)
-            .rbCard(theme)
+            .padding(.leading, Layout.rowInset)
+            .padding(.trailing, 7)
+            .frame(minHeight: 40)
+            .rbCard(theme, radius: 12)
         }
     }
 
     private var folder: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "Pasta")
-            Text(Paths.abbreviate(runtime.config.cwd))
-                .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-            HStack(spacing: 6) {
-                Button("Finder") {
-                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: runtime.config.cwd)
+            SectionLabel(text: "Pasta").padding(.leading, 2)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Color.rbText3)
+                        .accessibilityHidden(true)
+                    Text(Paths.abbreviate(runtime.config.cwd))
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(Color.rbText2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                    Spacer(minLength: 0)
                 }
-                ForEach(Editors.installed, id: \.bundleID) { editor in
-                    Button(editor.name) { Editors.open(runtime.config.cwd, with: editor) }
+                .padding(.horizontal, Layout.rowInset)
+                .frame(height: 38)
+                // Com muitos editores instalados a fileira rola em vez de estourar o painel.
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        Button("Finder") {
+                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: runtime.config.cwd)
+                        }
+                        ForEach(Editors.installed, id: \.bundleID) { editor in
+                            Button(editor.name) { Editors.open(runtime.config.cwd, with: editor) }
+                        }
+                    }
+                    .rbButton(theme)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
                 }
+                .scrollIndicators(.hidden)
+                .padding(.bottom, 8)
             }
-            .rbButton(theme)
-            .controlSize(.small)
+            .rbCard(theme, radius: 12)
         }
     }
 
     private var logs: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let shape = RoundedRectangle(cornerRadius: theme.logRadius, style: .continuous)
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center) {
-                SectionLabel(text: "Saída")
+                SectionLabel(text: "Saída").padding(.leading, 2)
                 Spacer()
                 Button("Abrir log completo") { NSWorkspace.shared.open(runtime.logURL) }
                     .buttonStyle(TextButtonStyle(accent: true, size: 11.5))
-                    .padding(.trailing, -8)
+                    .padding(.trailing, -6)
             }
             .frame(height: 18)
             ScrollView {
@@ -258,12 +300,13 @@ struct ServiceDetailView: View {
                     }
                 }
                 .textSelection(.enabled)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 9)
             }
             .defaultScrollAnchor(.bottom)
             .frame(height: 150)
-            .background(Color.rbLogBackground, in: RoundedRectangle(cornerRadius: theme.logRadius, style: .continuous))
+            .background(Color.rbLogBackground, in: shape)
+            .overlay(shape.strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
             .environment(\.colorScheme, .dark)
         }
     }
@@ -279,79 +322,73 @@ struct ServiceDetailView: View {
     }
 }
 
-// MARK: - Gráfico pequeno com leitura ao passar o mouse
+// MARK: - Histórico em barras com leitura ao passar o mouse
 
-private struct Sparkline: View {
+/// Trinta barras para os últimos 30 minutos; a de agora vem na cor do app.
+private struct BarHistory: View {
     @Environment(\.theme) private var theme
     let title: String
     let points: [MetricPoint]
     let floorAtZero: Bool
     let format: (Double) -> String
-    @ViewState private var hover: MetricPoint?
+    @ViewState private var hover: Int?
+
+    private static let slots = 30
+    private static let gap: CGFloat = 2
 
     var body: some View {
-        let values = points.map(\.value)
-        let lo = floorAtZero ? 0 : (values.min() ?? 0)
-        let hiRaw = values.max() ?? 1
-        let span = max(hiRaw - lo, floorAtZero ? 5 : hiRaw * 0.05 + 1)
-        let low = floorAtZero ? 0 : lo - span * 0.5
-        let high = lo + span * 1.15
-        VStack(alignment: .leading, spacing: 6) {
+        let buckets = Metrics.buckets(points, count: Self.slots)
+        let scale = Metrics.scale(buckets.map(\.value), floorAtZero: floorAtZero)
+        let hovered = hover.flatMap { buckets.indices.contains($0) ? $0 : nil }
+        // Sem o mouse em cima, o número é a última amostra (a barra é a média do minuto).
+        let value = hovered.map { buckets[$0].value } ?? points.last?.value ?? 0
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                SectionLabel(text: title)
+                Text(title)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color.rbText2)
                 Spacer()
-                Text(format(hover?.value ?? points.last?.value ?? 0))
+                Text(format(value))
                     .font(.system(size: 13, weight: .medium, design: .monospaced))
             }
-            Chart {
-                ForEach(points) { p in
-                    AreaMark(x: .value("Hora", p.date), yStart: .value("Base", low), yEnd: .value(title, p.value))
-                        .foregroundStyle(Color.accentColor.opacity(0.12))
-                        .interpolationMethod(.monotone)
-                    LineMark(x: .value("Hora", p.date), y: .value(title, p.value))
-                        .foregroundStyle(Color.accentColor)
-                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                        .interpolationMethod(.monotone)
+            GeometryReader { geo in
+                let width = (geo.size.width - Self.gap * CGFloat(Self.slots - 1)) / CGFloat(Self.slots)
+                // As barras encostam na direita: "agora" fica sempre na borda, mesmo com pouco histórico.
+                let lead = geo.size.width - (CGFloat(buckets.count) * (width + Self.gap) - Self.gap)
+                HStack(alignment: .bottom, spacing: Self.gap) {
+                    ForEach(Array(buckets.enumerated()), id: \.offset) { index, bucket in
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                            .fill(highlighted(index, hovered: hovered, last: buckets.count - 1) ? Color.rbLiveFill : Color.rbBar)
+                            .frame(width: max(width, 1), height: max(2, geo.size.height * scale.fraction(bucket.value)))
+                    }
                 }
-                if let h = hover ?? points.last {
-                    PointMark(x: .value("Hora", h.date), y: .value(title, h.value))
-                        .foregroundStyle(Color.accentColor)
-                        .symbolSize(30)
-                }
-                if let h = hover {
-                    RuleMark(x: .value("Hora", h.date)).foregroundStyle(Color.secondary.opacity(0.35))
-                }
-            }
-            .chartXAxis(.hidden)
-            .chartYAxis(.hidden)
-            .chartLegend(.hidden)
-            .chartYScale(domain: low...high)
-            .frame(height: 36)
-            .chartOverlay { proxy in
-                GeometryReader { geo in
-                    Rectangle().fill(.clear).contentShape(Rectangle())
-                        .onContinuousHover { phase in
-                            switch phase {
-                            case .active(let location):
-                                guard let plot = proxy.plotFrame else { return }
-                                let x = location.x - geo[plot].origin.x
-                                if let date: Date = proxy.value(atX: x) {
-                                    hover = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
-                                }
-                            case .ended:
-                                hover = nil
-                            }
-                        }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let location):
+                        let index = Int(((location.x - lead) / (width + Self.gap)).rounded(.down))
+                        hover = buckets.indices.contains(index) ? index : nil
+                    case .ended:
+                        hover = nil
+                    }
                 }
             }
+            .frame(height: 44)
             .accessibilityLabel("\(title) nos últimos \(minutes) minutos, agora \(format(points.last?.value ?? 0))")
-            Text(caption)
+            Text(caption(shown: hovered.map { buckets[$0] }))
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.rbText3)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Layout.rowInset)
+        .padding(.top, 10)
+        .padding(.bottom, 9)
         .rbCard(theme)
+    }
+
+    private func highlighted(_ index: Int, hovered: Int?, last: Int) -> Bool {
+        if let hovered { return index == hovered }
+        return index == last
     }
 
     private var minutes: Int {
@@ -359,9 +396,9 @@ private struct Sparkline: View {
         return max(1, Int(last.date.timeIntervalSince(first.date) / 60))
     }
 
-    private var caption: String {
-        if let h = hover, let last = points.last {
-            let ago = Int(last.date.timeIntervalSince(h.date) / 60)
+    private func caption(shown: Metrics.Bucket?) -> String {
+        if let shown, let last = points.last {
+            let ago = Int(last.date.timeIntervalSince(shown.date) / 60)
             return ago <= 0 ? "agora" : "há \(ago) min"
         }
         if minutes >= 30 { return "últimos 30 min" }
