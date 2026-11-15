@@ -44,6 +44,7 @@ struct ServiceDetailView: View {
                     if d.isAlive { charts }
                     command
                     folder
+                    DiskSection(runtime: runtime)
                     logs
                 }
                 .padding(.horizontal, theme.gutter)

@@ -43,12 +43,14 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
     public var stop: String?
     /// If the port is taken, start on the next free one.
     public var autoPort: Bool
+    /// Command that reinstalls dependencies. Without it, Runbar picks one from the lockfile.
+    public var install: String?
 
     public init(
         id: String, projectID: String, projectName: String, command: String, cwd: String,
         port: Int? = nil, type: ServiceType = .other, open: String? = nil, env: [String: String] = [:],
         envFile: String? = nil, health: String? = nil, autostart: Bool = false,
-        restart: RestartPolicy = .never, stop: String? = nil, autoPort: Bool = false
+        restart: RestartPolicy = .never, stop: String? = nil, autoPort: Bool = false, install: String? = nil
     ) {
         self.id = id
         self.projectID = projectID
@@ -65,6 +67,7 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
         self.restart = restart
         self.stop = stop
         self.autoPort = autoPort
+        self.install = install
     }
 
     /// Command with `{port}` replaced by the port the service will start on.
@@ -208,7 +211,7 @@ struct ConfigValidator {
     static let rootKeys = ["$schema", "version", "settings", "projects"]
     static let settingsKeys = ["look", "shell", "notifyOnCrash", "autoPort"]
     static let projectKeys = ["name", "root", "services"]
-    static let serviceKeys = ["command", "cwd", "port", "type", "open", "env", "envFile", "health", "autostart", "restart", "stop", "autoPort"]
+    static let serviceKeys = ["command", "cwd", "port", "type", "open", "env", "envFile", "health", "autostart", "restart", "stop", "autoPort", "install"]
 
     mutating func add(_ severity: ConfigIssue.Severity, _ message: String, _ path: String, _ pos: JSONPosition?) {
         issues.append(ConfigIssue(severity: severity, message: message, path: path, line: pos?.line ?? 0, column: pos?.column ?? 0))
@@ -479,6 +482,7 @@ struct ConfigValidator {
             }
         }
         let stop = string(o, "stop", path)
+        let install = string(o, "install", path)
         let autoPort = bool(o, "autoPort", path) ?? defaultAutoPort
         if let command {
             if command.contains("{port}"), port == nil {
@@ -495,7 +499,7 @@ struct ConfigValidator {
         return ServiceConfig(
             id: id, projectID: project.id, projectName: project.name, command: command, cwd: cwd,
             port: port, type: type, open: open, env: env, envFile: envFile, health: health,
-            autostart: autostart, restart: restart, stop: stop, autoPort: autoPort
+            autostart: autostart, restart: restart, stop: stop, autoPort: autoPort, install: install
         )
     }
 

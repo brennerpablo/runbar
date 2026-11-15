@@ -109,6 +109,10 @@ public enum BundledDocs {
           "type": "string",
           "description": "Extra command to stop it (e.g. docker compose down). The process and its children are always ended too."
         },
+        "install": {
+          "type": "string",
+          "description": "Command that reinstalls the service's dependencies (e.g. pnpm install). Runbar runs it in cwd after deleting node_modules or .venv from its Disk view. Without it, Runbar picks one from the lockfile: npm ci, pnpm install --frozen-lockfile, yarn install --frozen-lockfile, bun install, uv sync, or a new .venv from requirements.txt."
+        },
         "autoPort": {
           "type": "boolean",
           "description": "If the port is taken, start on the next free one (skipping the other services' ports). Needs the command to use {port} or the PORT variable. Default: settings.autoPort."
@@ -212,6 +216,7 @@ Service:
 | `autostart` | `true`/`false`                              | start when Runbar opens |
 | `restart`   | `never` `on-crash`                          | restart automatically if it crashes (up to 3 times in 2 minutes) |
 | `stop`      | string                                      | extra command to stop it (e.g. `docker compose down`) |
+| `install`   | string                                      | command that reinstalls dependencies after Runbar deletes `node_modules` or `.venv` (default: picked from the lockfile) |
 | `autoPort`  | `true`/`false`                              | if the port is taken, start on the next free one (default: `settings.autoPort`) |
 
 General settings (optional):

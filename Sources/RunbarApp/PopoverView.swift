@@ -4,11 +4,16 @@ import SwiftUI
 
 enum StatusFilter: Hashable { case all, running, stopped }
 
+/// What the panel lists below the tiles: services, or what projects take on disk.
+enum PanelTab: Hashable { case services, disk }
+
 struct PopoverView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @ViewState private var selected: String?
     var initialSelection: String?
+    var initialTab: PanelTab?
+    @ViewState private var tab: PanelTab = .services
     @ViewState private var query = ""
     @ViewState private var filter: StatusFilter = .all
     @ViewState private var expanded: Set<String> = []
@@ -31,6 +36,7 @@ struct PopoverView: View {
         .onAppear {
             prepareExpanded()
             if selected == nil, let initialSelection { selected = initialSelection }
+            if let initialTab { tab = initialTab }
         }
     }
 
@@ -61,21 +67,27 @@ struct PopoverView: View {
                 .padding(.horizontal, t.gutter)
                 .padding(.top, 10)
             }
-            if model.groups.isEmpty {
+            if tab == .services && model.groups.isEmpty {
                 emptyState(t)
                     .padding(.horizontal, t.gutter)
                     .padding(.top, 12)
                     .padding(.bottom, t.gutter)
             } else {
-                listHeader(t)
-                    .padding(.horizontal, t.gutter)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
+                Group {
+                    if tab == .services { listHeader(t) } else { diskHeader(t) }
+                }
+                .padding(.horizontal, t.gutter)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
                 ZStack(alignment: .bottom) {
                     AdaptiveScroll(maxHeight: listMaxHeight(alerts: !alerts.isEmpty), holdHeight: isFiltering) {
                         VStack(alignment: .leading, spacing: 8) {
-                            groupsList(t)
-                            if !model.otherListeners.isEmpty { othersSection(t) }
+                            if tab == .services {
+                                groupsList(t)
+                                if !model.otherListeners.isEmpty { othersSection(t) }
+                            } else {
+                                DiskPanel(query: query)
+                            }
                         }
                         .padding(.horizontal, t.gutter)
                         // Room for the last row to scroll above the floating search.
@@ -164,23 +176,74 @@ struct PopoverView: View {
         .accessibilityLabel("More options")
     }
 
+    /// Running and Disk are also the tabs: the raised one is the view below.
     private func tiles(_ t: Theme) -> some View {
         let running = model.runningCount
         let memory = Format.memory(model.totalMemory).split(separator: " ").map(String.init)
+        let disk = DiskModel.shared
+        let diskSize = Format.memory(disk.total).split(separator: " ").map(String.init)
         return HStack(spacing: 8) {
-            StatTile(label: "Running", value: "\(running)", raised: true, live: running > 0) {
-                Text("of \(model.config.services.count)")
-                    .font(.system(size: 11.5))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.rbText2)
+            Button { show(.services) } label: {
+                StatTile(label: "Running", value: "\(running)", raised: tab == .services, live: running > 0) {
+                    Text("of \(model.config.services.count)")
+                        .font(.system(size: 11.5))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.rbText2)
+                }
             }
-            StatTile(label: "Memory", value: running > 0 ? (memory.first ?? "—") : "—", unit: running > 0 ? memory.dropFirst().first : nil) {
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(tab == .services ? .isSelected : [])
+            .accessibilityHint("Show services")
+            StatTile(label: "Memory", value: running > 0 ? (memory.first ?? "—") : "—", unit: running > 0 ? memory.dropFirst().first : nil,
+                     note: running > 0 ? "\(Int(model.totalCPU.rounded()))% CPU" : nil) {
                 MiniBars(values: Metrics.buckets(model.totalHistory(\.memHistory), count: 7).map(\.value), floorAtZero: false)
             }
-            StatTile(label: "CPU", value: running > 0 ? "\(Int(model.totalCPU.rounded()))" : "—", unit: running > 0 ? "%" : nil) {
-                MiniBars(values: Metrics.buckets(model.totalHistory(\.cpuHistory), count: 7).map(\.value))
+            Button { show(.disk) } label: {
+                StatTile(label: "Disk", value: disk.hasMeasured ? (diskSize.first ?? "—") : "—", unit: disk.hasMeasured ? diskSize.dropFirst().first : nil,
+                         raised: tab == .disk, note: disk.freeBytes.map { "\(DiskText.roundedSize($0)) free" },
+                         noteColor: disk.lowOnSpace ? .rbWarn : .rbText3) {
+                    EmptyView()
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(tab == .disk ? .isSelected : [])
+            .accessibilityHint("Show what projects take on disk")
+        }
+    }
+
+    private func show(_ next: PanelTab) {
+        guard tab != next else { return }
+        query = ""
+        tab = next
+        if next == .disk { DiskModel.shared.scanIfStale() }
+    }
+
+    private func diskHeader(_ t: Theme) -> some View {
+        let disk = DiskModel.shared
+        let current = disk.scanning.compactMap { id in model.config.projects.first { $0.id == id }?.name }.sorted().first
+        return HStack(alignment: .center, spacing: 6) {
+            Text("Disk")
+                .font(.system(size: 12.5, weight: .semibold))
+            Text(disk.isScanning ? "measuring\(current.map { " \($0)" } ?? "")…" : DiskText.scanned(disk.scannedAt))
+                .font(.system(size: 12))
+                .foregroundStyle(Color.rbText3)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if disk.isScanning {
+                ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 26, height: 26)
+            } else {
+                Button { disk.scan() } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 10.5, weight: .bold))
+                        Text("Measure again")
+                    }
+                }
+                .buttonStyle(TextButtonStyle(accent: true, size: 11.5))
+                .padding(.trailing, -6)
             }
         }
+        .padding(.leading, 2)
+        .frame(height: 26)
     }
 
     /// One line for the first alert; clicking it opens the service.
@@ -233,7 +296,7 @@ struct PopoverView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.rbText2)
-            TextField("Search services or ports", text: $query, prompt: Text("Search services or ports").foregroundStyle(Color.rbText3))
+            TextField(searchPrompt, text: $query, prompt: Text(searchPrompt).foregroundStyle(Color.rbText3))
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .focused($searchFocused)
@@ -269,6 +332,8 @@ struct PopoverView: View {
                 .accessibilityHidden(true)
         }
     }
+
+    private var searchPrompt: String { tab == .services ? "Search services or ports" : "Filter projects or folders" }
 
     private var isFiltering: Bool { filter != .all || !query.trimmingCharacters(in: .whitespaces).isEmpty }
 

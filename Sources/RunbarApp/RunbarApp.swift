@@ -31,6 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         AppModel.shared.start()
         StatusBarController.shared.install()
+        // First disk measurement a little after launch, in the background, so the Disk tile has a number.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+            MainActor.assumeIsolated { DiskModel.shared.scanIfStale() }
+        }
     }
 
     /// The app lives in the menu bar: closing the panel or the agent window quits nothing.

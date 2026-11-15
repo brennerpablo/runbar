@@ -70,6 +70,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     func open() {
         let panel = self.panel ?? makePanel()
         self.panel = panel
+        DiskModel.shared.refreshFreeSpace()
         place(panel)
         // With the app active, no other app takes focus from the panel while it is open.
         let front = NSWorkspace.shared.frontmostApplication

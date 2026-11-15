@@ -102,6 +102,10 @@ extension Color {
     static let rbSegmentOn = rb(light: white(1), dark: white(0.15))
     static let rbRing = rb(light: ink(0.40), dark: white(0.42))
     static let rbBar = rb(light: ink(0.20), dark: white(0.26))
+    // Disk bars: dependencies and tool caches, two steps lighter than build output (green).
+    static let rbDepsBar = rb(light: ink(0.38), dark: white(0.42))
+    static let rbToolsBar = rb(light: ink(0.18), dark: white(0.20))
+    static let rbOnWarn = Color(nsColor: hex(0x3A2003))
     static let rbSearchField = rb(light: white(0.95), dark: hex(0x323944, 0.94))
 
     // Panel: opaque when solid; for glass, an 84% tint of the same color over the blur of what's behind.

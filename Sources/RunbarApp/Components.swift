@@ -207,20 +207,33 @@ struct StatTile<Trailing: View>: View {
     let label: String
     let value: String
     var unit: String?
-    /// Lighter step, for the main tile.
+    /// Lighter step: the tile whose view is showing.
     var raised = false
     var live = false
+    /// Small text at the right of the label ("6% CPU", "28 GB free").
+    var note: String?
+    var noteColor: Color = .rbText3
     @ViewBuilder var trailing: Trailing
     @Environment(\.theme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
+                // The label never truncates; the note gives way first.
                 Text(label)
                     .font(.system(size: 11.5))
                     .foregroundStyle(Color.rbText2)
                     .lineLimit(1)
+                    .fixedSize()
                 Spacer(minLength: 0)
+                if let note {
+                    Text(note)
+                        .font(.system(size: 11))
+                        .monospacedDigit()
+                        .foregroundStyle(noteColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
                 if live { StatusDot(dot: .running, size: 7).padding(.trailing, 3) }
             }
             Spacer(minLength: 0)
@@ -319,15 +332,18 @@ enum Metrics {
 /// Text button: solid green for the primary action, a neutral tint otherwise.
 struct RBButtonStyle: ButtonStyle {
     var prominent = false
+    /// Amber fill, for actions that can't be undone.
+    var warn = false
 
     func makeBody(configuration: Configuration) -> some View {
-        RBButtonBody(configuration: configuration, prominent: prominent)
+        RBButtonBody(configuration: configuration, prominent: prominent, warn: warn)
     }
 }
 
 private struct RBButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let prominent: Bool
+    var warn = false
     @Environment(\.theme) private var theme
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
@@ -338,13 +354,13 @@ private struct RBButtonBody: View {
         let shape = RoundedRectangle(cornerRadius: small ? 8 : theme.buttonRadius, style: .continuous)
         configuration.label
             .font(.system(size: small ? 11.5 : 12.5, weight: prominent ? .semibold : .medium))
-            .foregroundStyle(prominent ? Color.rbOnPrimary : Color.primary)
+            .foregroundStyle(prominent ? (warn ? Color.rbOnWarn : Color.rbOnPrimary) : Color.primary)
             .lineLimit(1)
             .padding(.horizontal, small ? 10 : 13)
             .frame(height: small ? 26 : 32)
             .background {
                 if prominent {
-                    shape.fill(Color.rbPrimary)
+                    shape.fill(warn ? Color.rbWarnFill : Color.rbPrimary)
                     shape.fill(Color.white.opacity(hover && !configuration.isPressed ? 0.16 : 0))
                     shape.fill(Color.black.opacity(configuration.isPressed ? 0.10 : 0))
                 } else {

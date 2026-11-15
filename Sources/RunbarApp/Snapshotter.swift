@@ -10,6 +10,7 @@ enum Snapshotter {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let model = AppModel.shared
         model.prepareForSnapshot()
+        DiskModel.shared.scanNow()
         let detailID = detail ?? model.runtimes.values.first(where: \.isRunningAnywhere)?.id
         var written: [String] = []
         for look in [LookSetting.solid, .glass] {
@@ -18,6 +19,7 @@ enum Snapshotter {
                 let suffix = "\(look.rawValue)-\(dark ? "dark" : "light")"
                 let glass = look == .glass
                 written.append(render(backdrop(PopoverView().environment(model), glass: glass, dark: dark), name: "list-\(suffix)", dir: dir, dark: dark))
+                written.append(render(backdrop(PopoverView(initialTab: .disk).environment(model), glass: glass, dark: dark), name: "disk-\(suffix)", dir: dir, dark: dark))
                 if let detailID {
                     written.append(render(backdrop(PopoverView(initialSelection: detailID).environment(model), glass: glass, dark: dark), name: "detail-\(suffix)", dir: dir, dark: dark))
                 }
