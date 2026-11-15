@@ -10,7 +10,7 @@ public enum ServiceType: String, Sendable, CaseIterable, Codable {
         case .python: return "Python"
         case .docker: return "Docker"
         case .java: return "Java"
-        case .other: return "Outro"
+        case .other: return "Other"
         }
     }
 }
@@ -128,11 +128,11 @@ public struct ConfigIssue: Sendable, Equatable, CustomStringConvertible {
     public var line: Int
     public var column: Int
 
-    public var location: String { line > 0 ? "linha \(line), coluna \(column)" : "" }
+    public var location: String { line > 0 ? "line \(line), column \(column)" : "" }
 
     public var description: String {
         let loc = line > 0 ? "\(line):\(column): " : ""
-        let kind = severity == .error ? "erro" : "aviso"
+        let kind = severity == .error ? "error" : "warning"
         let p = path.isEmpty ? "" : " [\(path)]"
         return "\(loc)\(kind): \(message)\(p)"
     }
@@ -151,7 +151,7 @@ public enum ConfigLoader {
         do {
             return load(data: try Data(contentsOf: url))
         } catch {
-            let issue = ConfigIssue(severity: .error, message: "não consegui ler \(Paths.abbreviate(url.path)): \(error.localizedDescription)", path: "", line: 0, column: 0)
+            let issue = ConfigIssue(severity: .error, message: "couldn't read \(Paths.abbreviate(url.path)): \(error.localizedDescription)", path: "", line: 0, column: 0)
             return ConfigLoadResult(config: nil, issues: [issue], json: nil)
         }
     }
@@ -251,8 +251,8 @@ struct ConfigValidator {
 
     mutating func checkKeys(_ obj: JSONObject, _ allowed: [String], _ path: String) {
         for e in obj.entries where !allowed.contains(e.key) {
-            var msg = "campo desconhecido \"\(e.key)\""
-            if let s = Self.suggest(e.key, allowed) { msg += "; quis dizer \"\(s)\"?" }
+            var msg = "unknown field \"\(e.key)\""
+            if let s = Self.suggest(e.key, allowed) { msg += "; did you mean \"\(s)\"?" }
             add(.warning, msg, Self.join(path, e.key), e.position)
         }
     }
@@ -260,41 +260,41 @@ struct ConfigValidator {
     mutating func string(_ o: JSONObject, _ key: String, _ path: String) -> String? {
         guard let v = o[key], !v.isNull else { return nil }
         if case .string(let s) = v { return s }
-        add(.error, "\(key) precisa ser texto entre aspas, não \(v.typeName)", Self.join(path, key), o.position(of: key))
+        add(.error, "\(key) must be a quoted string, not \(v.typeName)", Self.join(path, key), o.position(of: key))
         return nil
     }
 
     mutating func bool(_ o: JSONObject, _ key: String, _ path: String) -> Bool? {
         guard let v = o[key], !v.isNull else { return nil }
         if case .bool(let b) = v { return b }
-        add(.error, "\(key) precisa ser true ou false, não \(v.typeName)", Self.join(path, key), o.position(of: key))
+        add(.error, "\(key) must be true or false, not \(v.typeName)", Self.join(path, key), o.position(of: key))
         return nil
     }
 
     mutating func validate(_ json: JSON) -> RunbarConfig {
         var config = RunbarConfig()
         guard case .object(let root) = json else {
-            add(.error, "o arquivo precisa ser um objeto JSON { … }", "", JSONPosition(line: 1, column: 1))
+            add(.error, "the file must be a JSON object { … }", "", JSONPosition(line: 1, column: 1))
             return config
         }
         checkKeys(root, Self.rootKeys, "")
         if let v = root["version"], v.numberValue != 1 {
-            add(.error, "version precisa ser 1", "version", root.position(of: "version"))
+            add(.error, "version must be 1", "version", root.position(of: "version"))
         }
         if let s = root["settings"] {
             if case .object(let so) = s {
                 config.settings = settings(so)
                 defaultAutoPort = config.settings.autoPort
             } else {
-                add(.error, "settings precisa ser um objeto", "settings", root.position(of: "settings"))
+                add(.error, "settings must be an object", "settings", root.position(of: "settings"))
             }
         }
         guard let p = root["projects"] else {
-            add(.warning, "ainda não há \"projects\"; adicione seus serviços", "projects", nil)
+            add(.warning, "no \"projects\" yet; add your services", "projects", nil)
             return config
         }
         guard case .object(let projects) = p else {
-            add(.error, "projects precisa ser um objeto: { \"id-do-projeto\": { … } }", "projects", root.position(of: "projects"))
+            add(.error, "projects must be an object: { \"project-id\": { … } }", "projects", root.position(of: "projects"))
             return config
         }
 
@@ -303,11 +303,11 @@ struct ConfigValidator {
         for entry in projects.entries {
             let path = "projects.\(entry.key)"
             guard Self.validID(entry.key) else {
-                add(.error, "id de projeto inválido \"\(entry.key)\": use letras, números, . _ ou -", path, entry.position)
+                add(.error, "invalid project id \"\(entry.key)\": use letters, digits, . _ or -", path, entry.position)
                 continue
             }
             guard case .object(let po) = entry.value else {
-                add(.error, "o projeto precisa ser um objeto { … }", path, entry.position)
+                add(.error, "the project must be an object { … }", path, entry.position)
                 continue
             }
             checkKeys(po, Self.projectKeys, path)
@@ -316,38 +316,38 @@ struct ConfigValidator {
             if let r = string(po, "root", path) {
                 let expanded = URL(fileURLWithPath: Paths.expand(r)).standardizedFileURL.path
                 rootDir = expanded
-                if !Self.dirExists(expanded) { add(.warning, "a pasta \(r) não existe", path + ".root", po.position(of: "root")) }
+                if !Self.dirExists(expanded) { add(.warning, "the folder \(r) doesn't exist", path + ".root", po.position(of: "root")) }
             }
             var project = ProjectConfig(id: entry.key, name: name, root: rootDir, services: [])
 
             guard let s = po["services"] else {
-                add(.warning, "projeto sem \"services\"", path, entry.position)
+                add(.warning, "project has no \"services\"", path, entry.position)
                 config.projects.append(project)
                 continue
             }
             guard case .object(let services) = s else {
-                add(.error, "services precisa ser um objeto: { \"id-do-servico\": { … } }", path + ".services", po.position(of: "services"))
+                add(.error, "services must be an object: { \"service-id\": { … } }", path + ".services", po.position(of: "services"))
                 continue
             }
             for se in services.entries {
                 let spath = "\(path).services.\(se.key)"
                 guard Self.validID(se.key) else {
-                    add(.error, "id de serviço inválido \"\(se.key)\": use letras, números, . _ ou -", spath, se.position)
+                    add(.error, "invalid service id \"\(se.key)\": use letters, digits, . _ or -", spath, se.position)
                     continue
                 }
                 if let other = seen[se.key] {
-                    add(.error, "o id \"\(se.key)\" já existe no projeto \(other); ids de serviço são únicos no arquivo todo", spath, se.position)
+                    add(.error, "the id \"\(se.key)\" already exists in project \(other); service ids must be unique across the whole file", spath, se.position)
                     continue
                 }
                 guard case .object(let so) = se.value else {
-                    add(.error, "o serviço precisa ser um objeto { … }", spath, se.position)
+                    add(.error, "the service must be an object { … }", spath, se.position)
                     continue
                 }
                 guard let svc = service(id: se.key, project: project, obj: so, path: spath, position: se.position) else { continue }
                 seen[se.key] = entry.key
                 if let port = svc.port {
                     if let other = ports[port] {
-                        add(.warning, "a porta \(port) também é de \(other); os dois não conseguem rodar ao mesmo tempo", spath + ".port", so.position(of: "port"))
+                        add(.warning, "port \(port) is also used by \(other); the two can't run at the same time", spath + ".port", so.position(of: "port"))
                     } else {
                         ports[port] = se.key
                     }
@@ -366,14 +366,14 @@ struct ConfigValidator {
             if let l = LookSetting(rawValue: look) {
                 s.look = l
             } else {
-                add(.error, "look precisa ser \"auto\", \"solid\" ou \"glass\"", "settings.look", o.position(of: "look"))
+                add(.error, "look must be \"auto\", \"solid\" or \"glass\"", "settings.look", o.position(of: "look"))
             }
         }
         if let shell = string(o, "shell", "settings") {
             if FileManager.default.isExecutableFile(atPath: shell) {
                 s.shell = shell
             } else {
-                add(.warning, "o shell \(shell) não existe; usando /bin/zsh", "settings.shell", o.position(of: "shell"))
+                add(.warning, "the shell \(shell) doesn't exist; using /bin/zsh", "settings.shell", o.position(of: "shell"))
             }
         }
         if let n = bool(o, "notifyOnCrash", "settings") { s.notifyOnCrash = n }
@@ -387,9 +387,9 @@ struct ConfigValidator {
 
         let command = string(o, "command", path)?.trimmingCharacters(in: .whitespacesAndNewlines)
         if o["command"] == nil {
-            add(.error, "falta \"command\": o comando que sobe o serviço", path, position)
+            add(.error, "missing \"command\": the command that starts the service", path, position)
         } else if command?.isEmpty == true {
-            add(.error, "command está vazio", path + ".command", o.position(of: "command"))
+            add(.error, "command is empty", path + ".command", o.position(of: "command"))
         }
 
         var cwd: String?
@@ -400,16 +400,16 @@ struct ConfigValidator {
             } else if let root = project.root {
                 cwd = (root as NSString).appendingPathComponent(expanded)
             } else {
-                add(.error, "cwd relativo (\(raw)) precisa de \"root\" no projeto", path + ".cwd", o.position(of: "cwd"))
+                add(.error, "relative cwd (\(raw)) needs a \"root\" in the project", path + ".cwd", o.position(of: "cwd"))
             }
         } else if let root = project.root {
             cwd = root
         } else {
-            add(.error, "sem \"cwd\" e o projeto não tem \"root\"", path, position)
+            add(.error, "no \"cwd\" and the project has no \"root\"", path, position)
         }
         if let c = cwd {
             cwd = URL(fileURLWithPath: c).standardizedFileURL.path
-            if !Self.dirExists(cwd!) { add(.warning, "a pasta \(Paths.abbreviate(cwd!)) não existe", path + ".cwd", o.position(of: "cwd") ?? position) }
+            if !Self.dirExists(cwd!) { add(.warning, "the folder \(Paths.abbreviate(cwd!)) doesn't exist", path + ".cwd", o.position(of: "cwd") ?? position) }
         }
 
         var port: Int?
@@ -417,7 +417,7 @@ struct ConfigValidator {
             if let n = v.numberValue, n.rounded() == n, n >= 1, n <= 65535 {
                 port = Int(n)
             } else {
-                add(.error, "port precisa ser um número inteiro entre 1 e 65535", path + ".port", o.position(of: "port"))
+                add(.error, "port must be a whole number from 1 to 65535", path + ".port", o.position(of: "port"))
             }
         }
 
@@ -427,7 +427,7 @@ struct ConfigValidator {
                 type = st
             } else {
                 let options = ServiceType.allCases.map(\.rawValue).joined(separator: ", ")
-                add(.error, "type \"\(t)\" não existe; use \(options)", path + ".type", o.position(of: "type"))
+                add(.error, "type \"\(t)\" doesn't exist; use \(options)", path + ".type", o.position(of: "type"))
             }
         } else if let command, let cwd {
             type = Self.guessType(command: command, cwd: cwd)
@@ -435,7 +435,7 @@ struct ConfigValidator {
 
         let open = string(o, "open", path)
         if let open, !open.contains("://") {
-            add(.warning, "open deveria ser uma URL completa, como http://localhost:{port}", path + ".open", o.position(of: "open"))
+            add(.warning, "open should be a full URL, like http://localhost:{port}", path + ".open", o.position(of: "open"))
         }
 
         var env: [String: String] = [:]
@@ -446,11 +446,11 @@ struct ConfigValidator {
                     case .string(let s): env[e.key] = s
                     case .number(let n): env[e.key] = n.rounded() == n ? String(Int64(n)) : String(n)
                     case .bool(let b): env[e.key] = b ? "true" : "false"
-                    default: add(.error, "o valor de \(e.key) precisa ser texto", path + ".env." + e.key, e.position)
+                    default: add(.error, "the value of \(e.key) must be a string", path + ".env." + e.key, e.position)
                     }
                 }
             } else {
-                add(.error, "env precisa ser um objeto { \"NOME\": \"valor\" }", path + ".env", o.position(of: "env"))
+                add(.error, "env must be an object { \"NAME\": \"value\" }", path + ".env", o.position(of: "env"))
             }
         }
 
@@ -460,13 +460,13 @@ struct ConfigValidator {
             let full = expanded.hasPrefix("/") ? expanded : ((cwd ?? project.root ?? "") as NSString).appendingPathComponent(expanded)
             envFile = full
             if !FileManager.default.fileExists(atPath: full) {
-                add(.warning, "o arquivo \(f) não existe", path + ".envFile", o.position(of: "envFile"))
+                add(.warning, "the file \(f) doesn't exist", path + ".envFile", o.position(of: "envFile"))
             }
         }
 
         let health = string(o, "health", path)
         if let health, !(health.hasPrefix("/") || health.hasPrefix("http")) {
-            add(.warning, "health deveria começar com / (ex.: /health) ou ser uma URL", path + ".health", o.position(of: "health"))
+            add(.warning, "health should start with / (e.g. /health) or be a URL", path + ".health", o.position(of: "health"))
         }
 
         let autostart = bool(o, "autostart", path) ?? false
@@ -475,18 +475,18 @@ struct ConfigValidator {
             if let rp = RestartPolicy(rawValue: r) {
                 restart = rp
             } else {
-                add(.error, "restart precisa ser \"never\" ou \"on-crash\"", path + ".restart", o.position(of: "restart"))
+                add(.error, "restart must be \"never\" or \"on-crash\"", path + ".restart", o.position(of: "restart"))
             }
         }
         let stop = string(o, "stop", path)
         let autoPort = bool(o, "autoPort", path) ?? defaultAutoPort
         if let command {
             if command.contains("{port}"), port == nil {
-                add(.warning, "o comando usa {port}, mas o serviço não tem \"port\"", path + ".command", o.position(of: "command"))
+                add(.warning, "the command uses {port}, but the service has no \"port\"", path + ".command", o.position(of: "command"))
             }
             if autoPort, let port, !command.contains("{port}"),
                command.range(of: "(?<![0-9])\(port)(?![0-9])", options: .regularExpression) != nil {
-                add(.warning, "o comando fixa a porta \(port); troque por {port} para o autoPort conseguir subir em outra porta", path + ".command", o.position(of: "command"))
+                add(.warning, "the command hardcodes port \(port); use {port} instead so autoPort can start it on another port", path + ".command", o.position(of: "command"))
             }
         }
 

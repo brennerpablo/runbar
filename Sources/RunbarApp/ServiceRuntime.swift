@@ -132,7 +132,7 @@ final class ServiceRuntime: Identifiable {
         let cfg = config
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: cfg.cwd, isDirectory: &isDir), isDir.boolValue else {
-            phase = .failed("a pasta \(Paths.abbreviate(cfg.cwd)) não existe")
+            phase = .failed("folder \(Paths.abbreviate(cfg.cwd)) does not exist")
             return
         }
         // O Runbar exporta PORT: com a porta ocupada o servidor só cairia.
@@ -144,8 +144,8 @@ final class ServiceRuntime: Identifiable {
                 launchPort = free
                 fallback = port
             } else {
-                let owner = model?.portOwners[port]?.label ?? "outro processo"
-                phase = .failed("a :\(port) está em uso por \(owner)")
+                let owner = model?.portOwners[port]?.label ?? "another process"
+                phase = .failed("port :\(port) is in use by \(owner)")
                 return
             }
         }
@@ -166,7 +166,7 @@ final class ServiceRuntime: Identifiable {
             attach(pid: newPID, startedAt: Date(), isChild: true, logOffset: offset)
             model?.persistState()
         } catch {
-            phase = .failed("não consegui iniciar: \(error)")
+            phase = .failed("could not start: \(error)")
         }
     }
 
@@ -358,8 +358,8 @@ final class ServiceRuntime: Identifiable {
         }
         if !fm.fileExists(atPath: path) { fm.createFile(atPath: path, contents: nil) }
         let stamp = Format.stamp(Date())
-        var header = "\n── Runbar · \(stamp) · \(config.command(port: port)) · em \(Paths.abbreviate(config.cwd))"
-        if let fallbackFrom, let port { header += " · na :\(port) porque a :\(fallbackFrom) estava ocupada" }
+        var header = "\n── Runbar · \(stamp) · \(config.command(port: port)) · in \(Paths.abbreviate(config.cwd))"
+        if let fallbackFrom, let port { header += " · on :\(port) because :\(fallbackFrom) was taken" }
         header += "\n"
         guard let handle = try? FileHandle(forWritingTo: logURL) else { return 0 }
         defer { try? handle.close() }

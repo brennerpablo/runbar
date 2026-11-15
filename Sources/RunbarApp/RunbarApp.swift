@@ -8,7 +8,7 @@ struct RunbarMain: App {
 
     var body: some Scene {
         // O ícone da menu bar e o painel ficam em StatusPanel.swift.
-        Window("Configurar com um agente", id: "agent") {
+        Window("Set up with an agent", id: "agent") {
             AgentView()
                 .environment(AppModel.shared)
         }

@@ -46,7 +46,7 @@ final class StatusBarController: NSObject {
         button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
         button.title = count > 0 ? "\(count)" : ""
         button.imagePosition = count > 0 ? .imageLeading : .imageOnly
-        button.setAccessibilityLabel(count == 1 ? "Runbar, 1 serviço rodando" : "Runbar, \(count) serviços rodando")
+        button.setAccessibilityLabel(count == 1 ? "Runbar, 1 service running" : "Runbar, \(count) services running")
     }
 }
 

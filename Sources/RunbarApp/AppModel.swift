@@ -208,7 +208,7 @@ final class AppModel {
             ServiceGroup(id: p.id, name: p.name, runtimes: p.services.compactMap { runtimes[$0.id] })
         }
         let orphans = runtimes.values.filter(\.orphaned).sorted { $0.id < $1.id }
-        if !orphans.isEmpty { out.append(ServiceGroup(id: Self.orphanGroupID, name: "Fora do config.json", runtimes: orphans)) }
+        if !orphans.isEmpty { out.append(ServiceGroup(id: Self.orphanGroupID, name: "Not in config.json", runtimes: orphans)) }
         return out
     }
 
@@ -439,8 +439,8 @@ final class AppModel {
 
     func serviceCrashed(_ rt: ServiceRuntime) {
         guard config.settings.notifyOnCrash, Bundle.main.bundleIdentifier != nil else { return }
-        let title = "\(rt.id) caiu"
-        let code = rt.lastExitCode.map { "código \($0)" } ?? "sem código"
+        let title = "\(rt.id) crashed"
+        let code = rt.lastExitCode.map { "exit code \($0)" } ?? "no exit code"
         let body = [code, rt.lastLine].compactMap { $0 }.joined(separator: " · ")
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
@@ -458,7 +458,7 @@ final class AppModel {
         let server = ControlServer { [weak self] request, reply in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    reply(self?.handle(request) ?? ControlResponse(ok: false, error: "o Runbar está fechando"))
+                    reply(self?.handle(request) ?? ControlResponse(ok: false, error: "Runbar is quitting"))
                 }
             }
         }
@@ -466,7 +466,7 @@ final class AppModel {
             try server.start()
             control = server
         } catch {
-            NSLog("Runbar: não consegui abrir o socket de controle: \(error)")
+            NSLog("Runbar: could not open the control socket: \(error)")
         }
     }
 
@@ -478,34 +478,34 @@ final class AppModel {
             return ControlResponse(ok: true, services: statusList(), configError: configError?.description)
         case "reload":
             reloadConfig(force: true)
-            return ControlResponse(ok: configError == nil, message: "config recarregado: \(config.services.count) serviços", configError: configError?.description)
+            return ControlResponse(ok: configError == nil, message: "config reloaded: \(config.services.count) services", configError: configError?.description)
         case "start", "stop", "restart":
             guard let id = request.id, let rt = runtimes[id] else {
-                return ControlResponse(ok: false, error: "não existe serviço \"\(request.id ?? "")\" no config.json")
+                return ControlResponse(ok: false, error: "no service \"\(request.id ?? "")\" in config.json")
             }
             switch request.cmd {
             case "start":
-                if rt.isAlive { return ControlResponse(ok: true, message: "\(id) já está rodando") }
+                if rt.isAlive { return ControlResponse(ok: true, message: "\(id) is already running") }
                 rt.start()
                 if case .failed(let msg) = rt.phase { return ControlResponse(ok: false, error: msg) }
-                return ControlResponse(ok: true, message: "subindo \(id)")
+                return ControlResponse(ok: true, message: "starting \(id)")
             case "stop":
                 if !rt.isAlive {
                     if rt.external != nil {
                         rt.stopExternal()
-                        return ControlResponse(ok: true, message: "parando \(id) (iniciado fora do Runbar)")
+                        return ControlResponse(ok: true, message: "stopping \(id) (started outside Runbar)")
                     }
                     rt.stop()
-                    return ControlResponse(ok: true, message: "\(id) já está parado")
+                    return ControlResponse(ok: true, message: "\(id) is already stopped")
                 }
                 rt.stop()
-                return ControlResponse(ok: true, message: "parando \(id)")
+                return ControlResponse(ok: true, message: "stopping \(id)")
             default:
                 rt.restart()
-                return ControlResponse(ok: true, message: "reiniciando \(id)")
+                return ControlResponse(ok: true, message: "restarting \(id)")
             }
         default:
-            return ControlResponse(ok: false, error: "comando desconhecido: \(request.cmd)")
+            return ControlResponse(ok: false, error: "unknown command: \(request.cmd)")
         }
     }
 
@@ -600,7 +600,7 @@ final class AppModel {
     }
 
     func installCLI() -> String {
-        guard let helper = cliHelperPath else { return "O comando vem dentro do Runbar.app; abra o app instalado." }
+        guard let helper = cliHelperPath else { return "The command ships inside Runbar.app; open the installed app." }
         let fm = FileManager.default
         for dir in Self.cliDirectories where fm.isWritableFile(atPath: dir) {
             let link = dir + "/runbar"
@@ -609,10 +609,10 @@ final class AppModel {
                 try? fm.removeItem(atPath: link)
             }
             if (try? fm.createSymbolicLink(atPath: link, withDestinationPath: helper)) != nil {
-                return "Instalado em \(Paths.abbreviate(link))"
+                return "Installed at \(Paths.abbreviate(link))"
             }
         }
-        return "Não achei uma pasta do PATH com permissão de escrita."
+        return "Couldn't find a writable folder on your PATH."
     }
 
     /// Pasta-mãe comum dos projetos, para o pedido ao agente.

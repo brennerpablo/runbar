@@ -2,10 +2,10 @@ import Foundation
 
 public enum Format {
     private static func decimal(_ v: Double, _ digits: Int) -> String {
-        String(format: "%.\(digits)f", v).replacingOccurrences(of: ".", with: ",")
+        String(format: "%.\(digits)f", v)
     }
 
-    /// 1,4 GB · 214 MB · 3,2 MB
+    /// 1.4 GB · 214 MB · 3.2 MB
     public static func memory(_ bytes: UInt64) -> String {
         let mb = Double(bytes) / 1_048_576
         if mb >= 1000 { return decimal(mb / 1024, 1) + " GB" }
@@ -13,18 +13,18 @@ public enum Format {
         return decimal(mb, 1) + " MB"
     }
 
-    /// 2,1% · 140%
+    /// 2.1% · 140%
     public static func cpu(_ v: Double) -> String {
         decimal(v, v >= 100 ? 0 : 1) + "%"
     }
 
     public static func ago(_ date: Date, now: Date = Date()) -> String {
         let s = max(0, now.timeIntervalSince(date))
-        if s < 5 { return "agora" }
-        if s < 60 { return "há \(Int(s)) s" }
-        if s < 3600 { return "há \(Int(s / 60)) min" }
-        if s < 86400 { return "há \(Int(s / 3600)) h" }
-        return "há \(Int(s / 86400)) d"
+        if s < 5 { return "now" }
+        if s < 60 { return "\(Int(s))s ago" }
+        if s < 3600 { return "\(Int(s / 60)) min ago" }
+        if s < 86400 { return "\(Int(s / 3600))h ago" }
+        return "\(Int(s / 86400))d ago"
     }
 
     public static func duration(_ seconds: TimeInterval) -> String {
@@ -38,22 +38,22 @@ public enum Format {
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "pt_BR")
+        f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "HH:mm"
         return f
     }()
 
     private static let dayTimeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "pt_BR")
-        f.dateFormat = "d MMM HH:mm"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MMM d HH:mm"
         return f
     }()
 
     private static let stampFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "pt_BR")
-        f.dateFormat = "d MMM yyyy HH:mm:ss"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MMM d yyyy HH:mm:ss"
         return f
     }()
 

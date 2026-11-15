@@ -7,7 +7,7 @@ public enum BundledDocs {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "runbar-config-v1",
   "title": "Runbar config",
-  "description": "Serviços locais de desenvolvimento que o Runbar sobe, para e monitora. Leia README.md nesta pasta.",
+  "description": "Local development services that Runbar starts, stops and monitors. Read README.md in this folder.",
   "type": "object",
   "additionalProperties": false,
   "required": ["projects"],
@@ -21,28 +21,28 @@ public enum BundledDocs {
         "look": {
           "enum": ["auto", "solid", "glass"],
           "default": "auto",
-          "description": "Visual do app. auto usa Liquid Glass no macOS 26 ou mais novo e sólido nos anteriores."
+          "description": "App look. auto uses glass (blurred, translucent panel) on macOS 26 or later and solid on earlier versions."
         },
         "shell": {
           "type": "string",
           "default": "/bin/zsh",
-          "description": "Shell que roda os comandos, sempre como login shell (-l -c)."
+          "description": "Shell that runs the commands, always as a login shell (-l -c)."
         },
         "notifyOnCrash": {
           "type": "boolean",
           "default": true,
-          "description": "Mostra uma notificação quando um serviço cai."
+          "description": "Show a notification when a service crashes."
         },
         "autoPort": {
           "type": "boolean",
           "default": false,
-          "description": "Padrão para todos os serviços: se a porta configurada estiver ocupada, sobe na próxima porta livre. Cada serviço pode sobrescrever."
+          "description": "Default for every service: if the configured port is taken, start on the next free port. Each service can override it."
         }
       }
     },
     "projects": {
       "type": "object",
-      "description": "Projetos, na ordem em que aparecem no menu. A chave é o id do projeto.",
+      "description": "Projects, in the order they appear in the menu. The key is the project id.",
       "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
       "additionalProperties": { "$ref": "#/$defs/project" }
     }
@@ -52,11 +52,11 @@ public enum BundledDocs {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string", "description": "Nome exibido no menu. Padrão: o id." },
-        "root": { "type": "string", "description": "Pasta base do projeto. Aceita ~." },
+        "name": { "type": "string", "description": "Name shown in the menu. Default: the id." },
+        "root": { "type": "string", "description": "Base folder of the project. Accepts ~." },
         "services": {
           "type": "object",
-          "description": "Serviços do projeto. A chave é o id do serviço, único no arquivo todo.",
+          "description": "The project's services. The key is the service id, unique across the whole file.",
           "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
           "additionalProperties": { "$ref": "#/$defs/service" }
         }
@@ -70,48 +70,48 @@ public enum BundledDocs {
         "command": {
           "type": "string",
           "minLength": 1,
-          "description": "Comando que sobe o serviço em primeiro plano. Roda em zsh -l -c dentro de cwd. {port} vira a porta em que o serviço vai subir."
+          "description": "Command that runs the service in the foreground. Runs in zsh -l -c inside cwd. {port} becomes the port the service will start on."
         },
         "cwd": {
           "type": "string",
-          "description": "Pasta onde o comando roda. Relativa ao root do projeto ou absoluta. Padrão: o root."
+          "description": "Folder the command runs in. Relative to the project root, or absolute. Default: the root."
         },
         "port": {
           "type": ["integer", "null"],
           "minimum": 1,
           "maximum": 65535,
-          "description": "Porta esperada. O Runbar exporta PORT=<port> e avisa se o serviço subir em outra."
+          "description": "Expected port. Runbar exports PORT=<port> and warns if the service starts on a different one."
         },
         "type": {
           "enum": ["nextjs", "node", "python", "docker", "java", "other"],
-          "description": "Tipo do serviço. Se omitido, o Runbar tenta adivinhar pelo comando."
+          "description": "Service type. If omitted, Runbar guesses it from the command."
         },
         "open": {
           "type": "string",
-          "description": "URL do botão Abrir. {port} vira a porta real. Padrão: http://localhost:{port}."
+          "description": "URL for the Open button. {port} becomes the real port. Default: http://localhost:{port}."
         },
         "env": {
           "type": "object",
           "additionalProperties": { "type": ["string", "number", "boolean"] },
-          "description": "Variáveis de ambiente extras."
+          "description": "Extra environment variables."
         },
         "envFile": {
           "type": "string",
-          "description": "Arquivo de variáveis (KEY=valor) para carregar, relativo a cwd."
+          "description": "File of variables (KEY=value) to load, relative to cwd."
         },
         "health": {
           "type": "string",
-          "description": "Rota (ex.: /health) ou URL que precisa responder 2xx/3xx para o serviço contar como no ar."
+          "description": "Path (e.g. /health) or URL that must answer 2xx/3xx for the service to count as running."
         },
-        "autostart": { "type": "boolean", "default": false, "description": "Sobe quando o Runbar abre." },
-        "restart": { "enum": ["never", "on-crash"], "default": "never", "description": "Reinicia sozinho se o processo cair." },
+        "autostart": { "type": "boolean", "default": false, "description": "Start when Runbar opens." },
+        "restart": { "enum": ["never", "on-crash"], "default": "never", "description": "Restart automatically if the process crashes." },
         "stop": {
           "type": "string",
-          "description": "Comando extra para parar (ex.: docker compose down). Sempre encerra também o processo e os filhos."
+          "description": "Extra command to stop it (e.g. docker compose down). The process and its children are always ended too."
         },
         "autoPort": {
           "type": "boolean",
-          "description": "Se a porta estiver ocupada, sobe na próxima livre (pulando as portas dos outros serviços). Precisa que o comando use {port} ou a variável PORT. Padrão: settings.autoPort."
+          "description": "If the port is taken, start on the next free one (skipping the other services' ports). Needs the command to use {port} or the PORT variable. Default: settings.autoPort."
         }
       }
     }
@@ -121,25 +121,25 @@ public enum BundledDocs {
 """#
 
     public static let readme = #"""
-# Runbar — instruções para agentes
+# Runbar — instructions for agents
 
-O Runbar é um app de menu bar do macOS que sobe, para e monitora servidores de
-desenvolvimento locais (apps Next.js, APIs Python, docker compose…). Tudo o que
-ele sabe vem do `config.json` desta pasta. Este arquivo explica o formato para
-que um agente consiga montar ou ajustar a configuração.
+Runbar is a macOS menu bar app that starts, stops and monitors local development
+servers (Next.js apps, Python APIs, docker compose…). Everything it knows comes
+from the `config.json` in this folder. This file explains the format so an agent
+can write or adjust the configuration.
 
-## Arquivos
+## Files
 
-| arquivo       | quem edita           | o que é                                    |
-|---------------|----------------------|--------------------------------------------|
-| `config.json` | você, o agente, o app | a configuração                             |
-| `schema.json` | o app (não edite)    | JSON Schema do formato                     |
-| `README.md`   | o app (não edite)    | este arquivo                               |
+| file          | who edits it           | what it is                                 |
+|---------------|------------------------|--------------------------------------------|
+| `config.json` | you, the agent, the app | the configuration                         |
+| `schema.json` | the app (don't edit)   | JSON Schema of the format                  |
+| `README.md`   | the app (don't edit)   | this file                                  |
 
-O app observa a pasta e recarrega sozinho. Se o JSON ficar inválido, ele
-continua usando a última versão válida e mostra o erro com linha e coluna.
+The app watches the folder and reloads on its own. If the JSON becomes invalid,
+it keeps using the last valid version and shows the error with line and column.
 
-## Formato
+## Format
 
 ```json
 {
@@ -184,101 +184,102 @@ continua usando a última versão válida e mostra o erro com linha e coluna.
 }
 ```
 
-Projetos e serviços são objetos indexados pelo id, na ordem em que aparecem no
-menu. O id do serviço é o que se usa na linha de comando (`runbar start acme-web`).
+Projects and services are objects keyed by id, in the order they appear in the
+menu. The service id is what the command line uses (`runbar start acme-web`).
 
-## Campos
+## Fields
 
-Projeto:
+Project:
 
-| campo      | tipo    | o que faz                                   |
+| field      | type    | what it does                                |
 |------------|---------|---------------------------------------------|
-| `name`     | texto   | nome exibido no menu (padrão: o id)         |
-| `root`     | caminho | pasta base do projeto; aceita `~`           |
-| `services` | objeto  | os serviços, indexados pelo id              |
+| `name`     | string  | name shown in the menu (default: the id)    |
+| `root`     | path    | base folder of the project; accepts `~`     |
+| `services` | object  | the services, keyed by id                   |
 
-Serviço:
+Service:
 
-| campo       | tipo                                        | o que faz |
-|-------------|---------------------------------------------|-----------|
-| `command`   | texto, obrigatório                          | comando que sobe o serviço em primeiro plano; `{port}` vira a porta em que ele vai subir |
-| `cwd`       | caminho                                     | relativo ao `root` ou absoluto (padrão: o `root`) |
-| `port`      | número                                      | porta esperada; o Runbar exporta `PORT` e avisa se o serviço subir em outra |
-| `type`      | `nextjs` `node` `python` `docker` `java` `other` | ícone e regras de porta; se omitido, é adivinhado pelo comando |
-| `open`      | URL                                         | destino do botão Abrir; `{port}` vira a porta real |
-| `env`       | objeto                                      | variáveis de ambiente extras |
-| `envFile`   | caminho                                     | arquivo `KEY=valor` para carregar, relativo a `cwd` |
-| `health`    | rota ou URL                                 | precisa responder 2xx/3xx para o serviço contar como no ar |
-| `autostart` | `true`/`false`                              | sobe quando o Runbar abre |
-| `restart`   | `never` `on-crash`                          | reinicia sozinho se cair (até 3 vezes em 2 minutos) |
-| `stop`      | texto                                       | comando extra para parar (ex.: `docker compose down`) |
-| `autoPort`  | `true`/`false`                              | se a porta estiver ocupada, sobe na próxima livre (padrão: `settings.autoPort`) |
+| field       | type                                        | what it does |
+|-------------|---------------------------------------------|--------------|
+| `command`   | string, required                            | command that runs the service in the foreground; `{port}` becomes the port it will start on |
+| `cwd`       | path                                        | relative to `root`, or absolute (default: the `root`) |
+| `port`      | number                                      | expected port; Runbar exports `PORT` and warns if the service starts on a different one |
+| `type`      | `nextjs` `node` `python` `docker` `java` `other` | icon and port rules; guessed from the command if omitted |
+| `open`      | URL                                         | where the Open button goes; `{port}` becomes the real port |
+| `env`       | object                                      | extra environment variables |
+| `envFile`   | path                                        | `KEY=value` file to load, relative to `cwd` |
+| `health`    | path or URL                                 | must answer 2xx/3xx for the service to count as running |
+| `autostart` | `true`/`false`                              | start when Runbar opens |
+| `restart`   | `never` `on-crash`                          | restart automatically if it crashes (up to 3 times in 2 minutes) |
+| `stop`      | string                                      | extra command to stop it (e.g. `docker compose down`) |
+| `autoPort`  | `true`/`false`                              | if the port is taken, start on the next free one (default: `settings.autoPort`) |
 
-Configurações gerais (opcional):
+General settings (optional):
 
 ```json
 "settings": { "look": "auto", "shell": "/bin/zsh", "notifyOnCrash": true, "autoPort": false }
 ```
 
-`look`: `auto` (Liquid Glass no macOS 26+), `solid` ou `glass`.
-`autoPort`: padrão para todos os serviços; cada serviço pode sobrescrever.
+`look`: `auto` (glass on macOS 26+), `solid` or `glass`.
+`autoPort`: default for every service; each service can override it.
 
-## Regras
+## Rules
 
-1. `command` roda em `zsh -l -c` dentro de `cwd`. Use o mesmo comando que você
-   rodaria no Terminal. Não use `&`, `nohup` nem `npm start &`: o processo tem
-   que ficar em primeiro plano, senão o Runbar acha que ele terminou.
-2. O shell de login carrega o PATH do Homebrew, mas não ativa venvs. Em Python,
-   use o binário do venv: `.venv/bin/uvicorn …`, `.venv/bin/python manage.py …`.
-3. Escreva a porta no comando como `{port}`: o Runbar troca pela porta em que o
-   serviço vai subir (`npm run dev -- -p {port}`, `pnpm dev -p {port}`,
-   `.venv/bin/uvicorn app.main:app --port {port}`). Ele também exporta
-   `PORT=<porta>`, que o Next.js respeita.
-4. Cada serviço precisa de uma porta diferente. Vários apps Next.js usam 3000
-   por padrão: escolha portas livres (3001, 3002…). Se o script do
-   `package.json` já fixa a porta (`next dev -p 3100`), chame o binário direto
-   para poder trocar: `npx next dev -p {port}` ou `pnpm exec next dev -p {port}`.
-5. Porta ocupada: sem `autoPort`, o Runbar não sobe o serviço e diz quem está
-   na porta. Com `"autoPort": true`, ele sobe na próxima porta livre, pulando as
-   portas dos outros serviços do arquivo. O `{port}` no comando é o que permite
-   isso; um número fixo no comando impede (o `runbar validate` avisa).
-6. Ids: letras, números, `.`, `_` e `-`. O id de serviço é único no arquivo todo.
-   Prefira ids que já identificam o projeto (`acme-web`, `finch-site`).
-7. Não remova serviços que já existem sem o usuário pedir, e preserve campos que
-   você não entende.
-8. Depois de editar, rode `runbar validate`. Ele mostra cada problema com linha e
-   coluna. Corrija até não sobrar erro.
+1. `command` runs in `zsh -l -c` inside `cwd`. Use the same command you would run
+   in the Terminal. Don't use `&`, `nohup` or `npm start &`: the process has to
+   stay in the foreground, or Runbar thinks it exited.
+2. The login shell loads Homebrew's PATH but doesn't activate venvs. For Python,
+   use the venv's binary: `.venv/bin/uvicorn …`, `.venv/bin/python manage.py …`.
+3. Write the port in the command as `{port}`: Runbar replaces it with the port the
+   service will start on (`npm run dev -- -p {port}`, `pnpm dev -p {port}`,
+   `.venv/bin/uvicorn app.main:app --port {port}`). It also exports
+   `PORT=<port>`, which Next.js respects.
+4. Each service needs a different port. Many Next.js apps default to 3000: pick
+   free ports (3001, 3002…). If the `package.json` script already hardcodes the
+   port (`next dev -p 3100`), call the binary directly so it can be changed:
+   `npx next dev -p {port}` or `pnpm exec next dev -p {port}`.
+5. Port taken: without `autoPort`, Runbar doesn't start the service and says who
+   holds the port. With `"autoPort": true`, it starts on the next free port,
+   skipping the ports of the other services in the file. The `{port}` in the
+   command is what makes that possible; a fixed number in the command prevents it
+   (`runbar validate` warns about it).
+6. Ids: letters, digits, `.`, `_` and `-`. A service id is unique across the whole
+   file. Prefer ids that already name the project (`acme-web`, `finch-site`).
+7. Don't remove existing services unless the user asks, and keep fields you
+   don't understand.
+8. After editing, run `runbar validate`. It shows each problem with line and
+   column. Fix until no errors are left.
 
-## Como descobrir serviços numa pasta
+## Finding services in a folder
 
-- `package.json` com script `dev` → `npm run dev` (`pnpm dev` se houver
-  `pnpm-lock.yaml`, `yarn dev` com `yarn.lock`, `bun dev` com `bun.lockb`).
-  Se a dependência `next` existir, `type: "nextjs"`.
-- Monorepos (`apps/*`, `packages/*`, `pnpm-workspace.yaml`): um serviço por app
-  que sobe servidor, cada um com sua porta.
+- `package.json` with a `dev` script → `npm run dev` (`pnpm dev` if there is a
+  `pnpm-lock.yaml`, `yarn dev` with `yarn.lock`, `bun dev` with `bun.lockb`).
+  If the `next` dependency is present, `type: "nextjs"`.
+- Monorepos (`apps/*`, `packages/*`, `pnpm-workspace.yaml`): one service per app
+  that runs a server, each with its own port.
 - `docker-compose.yml`, `compose.yaml` → `docker compose up`,
-  `stop: "docker compose down"`, `type: "docker"`, porta = a principal publicada.
+  `stop: "docker compose down"`, `type: "docker"`, port = the main published one.
 - FastAPI → `.venv/bin/uvicorn app.main:app --reload --port {port}`.
   Django → `.venv/bin/python manage.py runserver {port}`. Flask →
   `.venv/bin/flask run --port {port}`.
-- O README do projeto costuma dizer o comando de desenvolvimento: confira.
-- Ignore pastas sem servidor de desenvolvimento: bibliotecas, scripts que rodam
-  e terminam, CLIs, backups.
+- The project's README usually gives the development command: check it.
+- Skip folders without a development server: libraries, scripts that run and
+  exit, CLIs, backups.
 
-## Linha de comando
+## Command line
 
-O app instala o comando `runbar` (menu ⋯ → Instalar comando no Terminal).
+The app installs the `runbar` command (⋯ menu → Install the runbar command).
 
 ```
-runbar validate [--json]        confere o config.json (linha e coluna de cada erro)
-runbar status [--json]          status, porta real, memória e CPU de cada serviço
-runbar start <id> [--wait]      sobe um serviço (--wait espera a porta abrir)
-runbar stop <id>                para o serviço e os processos filhos
-runbar restart <id> [--wait]    reinicia
-runbar logs <id> [-n 100] [-f]  saída do serviço
-runbar path                     pasta da configuração
+runbar validate [--json]        check config.json (line and column of each error)
+runbar status [--json]          status, real port, memory and CPU of each service
+runbar start <id> [--wait]      start a service (--wait waits for the port to open)
+runbar stop <id>                stop the service and its child processes
+runbar restart <id> [--wait]    restart
+runbar logs <id> [-n 100] [-f]  the service's output
+runbar path                     the config folder
 ```
 
-Os logs ficam em `~/Library/Logs/Runbar/<id>.log`.
+Logs are in `~/Library/Logs/Runbar/<id>.log`.
 """#
 }

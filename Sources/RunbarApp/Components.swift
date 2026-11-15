@@ -467,7 +467,7 @@ struct SegmentedFilter: View {
     @Binding var selection: StatusFilter
     @Environment(\.theme) private var theme
 
-    private let options: [(StatusFilter, String)] = [(.all, "Todos"), (.running, "Rodando"), (.stopped, "Parados")]
+    private let options: [(StatusFilter, String)] = [(.all, "All"), (.running, "Running"), (.stopped, "Stopped")]
 
     var body: some View {
         let outer = RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
@@ -497,7 +497,7 @@ struct SegmentedFilter: View {
         .frame(height: 26)
         .background(Color.rbControl, in: outer)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Filtrar por status")
+        .accessibilityLabel("Filter by status")
     }
 }
 

@@ -5,15 +5,15 @@ import SwiftUI
 enum AgentPrompt {
     static func setup(root: String) -> String {
         """
-        Configure o Runbar para os meus projetos em \(root).
+        Set up Runbar for my projects in \(root).
 
-        Leia ~/.config/runbar/README.md e edite ~/.config/runbar/config.json seguindo o ~/.config/runbar/schema.json. Para cada app que sobe um servidor de desenvolvimento (Next.js, APIs Python, docker compose…), adicione um serviço com a pasta, o comando e uma porta que não colida com as outras. Mantenha o que já existe no arquivo e rode `runbar validate` no fim.
+        Read ~/.config/runbar/README.md and edit ~/.config/runbar/config.json following ~/.config/runbar/schema.json. For each app that runs a development server (Next.js, Python APIs, docker compose…), add a service with its folder, its command and a port that doesn't clash with the others. Keep what's already in the file and run `runbar validate` at the end.
         """
     }
 
     static func fixError(_ issue: ConfigIssue) -> String {
-        let loc = issue.line > 0 ? "linha \(issue.line), coluna \(issue.column)" : "posição desconhecida"
-        return "O ~/.config/runbar/config.json está inválido (\(loc)): \(issue.message). Corrija o arquivo seguindo ~/.config/runbar/README.md e rode `runbar validate` até não sobrar erro."
+        let loc = issue.line > 0 ? "line \(issue.line), column \(issue.column)" : "unknown position"
+        return "~/.config/runbar/config.json is invalid (\(loc)): \(issue.message). Fix the file following ~/.config/runbar/README.md and run `runbar validate` until no errors remain."
     }
 }
 
@@ -27,17 +27,17 @@ struct AgentView: View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Peça para o seu agente configurar")
+                    Text("Let your agent set it up")
                         .font(.system(size: 20, weight: .semibold))
-                    Text("O Runbar lê tudo de um arquivo JSON. Qualquer agente que edita arquivos no seu Mac consegue montar a configuração inteira, e o Runbar recarrega assim que o arquivo muda.")
+                    Text("Runbar reads everything from one JSON file. Any agent that can edit files on your Mac can write the whole configuration, and Runbar reloads as soon as the file changes.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                step(1, "Copie o pedido") {
+                step(1, "Copy the request") {
                     HStack(spacing: 8) {
-                        Text("Pasta dos projetos").font(.system(size: 12.5))
+                        Text("Projects folder").font(.system(size: 12.5))
                         TextField("~/Documents/repos", text: $root)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 12, design: .monospaced))
@@ -53,7 +53,7 @@ struct AgentView: View {
                             Pasteboard.copy(AgentPrompt.setup(root: root.isEmpty ? model.suggestedRoot : root))
                             copied = true
                         } label: {
-                            Label(copied ? "Copiado" : "Copiar pedido", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            Label(copied ? "Copied" : "Copy request", systemImage: copied ? "checkmark" : "doc.on.doc")
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -62,14 +62,14 @@ struct AgentView: View {
                     .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color(nsColor: .separatorColor)))
                 }
 
-                step(2, "Cole no seu agente") {
-                    Text("Claude Code, Codex, Cursor ou outro com acesso aos seus arquivos. Ele lê o README.md, varre as pastas e escreve o config.json.")
+                step(2, "Paste it into your agent") {
+                    Text("Claude Code, Codex, Cursor or any other agent with access to your files. It reads README.md, scans the folders and writes config.json.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                step(3, "Confira aqui") { status }
+                step(3, "Check it here") { status }
             }
             .padding(28)
             .frame(width: 580, alignment: .leading)
@@ -77,22 +77,22 @@ struct AgentView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 22) {
-                sidebarSection("Em ~/.config/runbar") {
-                    fileRow("config.json", "Sua configuração. Você, o agente e o app editam o mesmo arquivo.")
-                    fileRow("schema.json", "JSON Schema para validar e ter autocomplete no editor.")
-                    fileRow("README.md", "Instruções escritas para agentes: formato, regras de porta, exemplos.")
-                    Button("Mostrar no Finder") { model.revealConfigDir() }.controlSize(.small)
+                sidebarSection("In ~/.config/runbar") {
+                    fileRow("config.json", "Your configuration. You, your agent and the app edit the same file.")
+                    fileRow("schema.json", "JSON Schema for validation and autocomplete in your editor.")
+                    fileRow("README.md", "Instructions written for agents: format, port rules, examples.")
+                    Button("Show in Finder") { model.revealConfigDir() }.controlSize(.small)
                 }
-                sidebarSection("No terminal") {
-                    fileRow("runbar validate", "Confere o arquivo e aponta o erro com linha e coluna.")
-                    fileRow("runbar status --json", "Status, porta real, memória e CPU de cada serviço.")
-                    fileRow("runbar start · stop · logs <id>", "O agente também sobe serviços e lê os logs para testar o que mudou.")
+                sidebarSection("In the terminal") {
+                    fileRow("runbar validate", "Checks the file and points to each error by line and column.")
+                    fileRow("runbar status --json", "Status, actual port, memory and CPU of each service.")
+                    fileRow("runbar start · stop · logs <id>", "Your agent can also start services and read their logs to test its changes.")
                     if let installed = model.cliInstalledPath {
-                        Text("Instalado em \(Paths.abbreviate(installed))")
+                        Text("Installed at \(Paths.abbreviate(installed))")
                             .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
                     } else {
-                        Button("Instalar comando runbar") { cliMessage = model.installCLI() }.controlSize(.small)
+                        Button("Install the runbar command") { cliMessage = model.installCLI() }.controlSize(.small)
                     }
                     if let cliMessage {
                         Text(cliMessage).font(.system(size: 11.5)).foregroundStyle(.secondary)
@@ -113,15 +113,15 @@ struct AgentView: View {
     private var status: some View {
         if let issue = model.configError {
             VStack(alignment: .leading, spacing: 8) {
-                Label("config.json com erro", systemImage: "exclamationmark.triangle.fill")
+                Label("config.json has an error", systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.rbWarn)
                 Text("\(issue.location.isEmpty ? "" : issue.location + ": ")\(issue.message)")
                     .font(.system(size: 12.5))
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    Button("Copiar erro para o agente") { Pasteboard.copy(AgentPrompt.fixError(issue)) }
-                    Button("Abrir config.json") { model.openConfigFile() }
+                    Button("Copy error for your agent") { Pasteboard.copy(AgentPrompt.fixError(issue)) }
+                    Button("Open config.json") { model.openConfigFile() }
                 }
                 .controlSize(.small)
             }
@@ -133,14 +133,14 @@ struct AgentView: View {
                 HStack(spacing: 10) {
                     Circle().fill(Color.rbGreen).frame(width: 8, height: 8)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("config.json válido").font(.system(size: 13, weight: .semibold))
+                        Text("config.json is valid").font(.system(size: 13, weight: .semibold))
                         Text(validLine).font(.system(size: 12.5)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Abrir config.json") { model.openConfigFile() }.controlSize(.small)
+                    Button("Open config.json") { model.openConfigFile() }.controlSize(.small)
                 }
                 ForEach(model.configWarnings.prefix(4), id: \.description) { w in
-                    Text("aviso: \(w.message)")
+                    Text("warning: \(w.message)")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Color.rbWarn)
                         .fixedSize(horizontal: false, vertical: true)
@@ -155,8 +155,8 @@ struct AgentView: View {
     private var validLine: String {
         let s = model.config.services.count
         let p = model.config.projects.count
-        let when = model.configLoadedAt.map { " · lido às \(Format.clock($0))" } ?? ""
-        return "\(s) \(s == 1 ? "serviço" : "serviços") em \(p) \(p == 1 ? "projeto" : "projetos")\(when)"
+        let when = model.configLoadedAt.map { " · read at \(Format.clock($0))" } ?? ""
+        return "\(s) \(s == 1 ? "service" : "services") in \(p) \(p == 1 ? "project" : "projects")\(when)"
     }
 
     private func step<Content: View>(_ n: Int, _ title: String, @ViewBuilder content: () -> Content) -> some View {

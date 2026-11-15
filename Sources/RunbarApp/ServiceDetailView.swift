@@ -16,7 +16,7 @@ struct ServiceDetailView: View {
                 Button(action: onBack) {
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
-                        Text("Serviços")
+                        Text("Services")
                     }
                 }
                 .buttonStyle(TextButtonStyle(size: 13))
@@ -37,7 +37,7 @@ struct ServiceDetailView: View {
                         Banner(text: info, tone: .info, actionLabel: d.fixLabel, action: d.fix.map { fix in { model.perform(fix, for: runtime) } })
                     }
                     if let note = d.note {
-                        Banner(text: note, actionLabel: "Reiniciar agora", action: { runtime.restart() })
+                        Banner(text: note, actionLabel: "Restart now", action: { runtime.restart() })
                     }
                     actions(d)
                     if d.isAlive || d.isExternal { facts(d) }
@@ -103,24 +103,24 @@ struct ServiceDetailView: View {
                     NSWorkspace.shared.open(url)
                 } label: {
                     HStack(spacing: 6) {
-                        Text("Abrir \(url.host ?? "localhost")\(url.port.map { ":\($0)" } ?? "")")
+                        Text("Open \(url.host ?? "localhost")\(url.port.map { ":\($0)" } ?? "")")
                         Image(systemName: "arrow.up.right").font(.system(size: 9.5, weight: .bold))
                     }
                 }
                 .rbButton(theme, prominent: true)
             }
             if d.isExternal {
-                Button("Parar") { runtime.stopExternal() }.rbButton(theme)
+                Button("Stop") { runtime.stopExternal() }.rbButton(theme)
             } else if d.isAlive {
-                Button("Reiniciar") { runtime.restart() }.rbButton(theme)
-                Button("Parar") { runtime.stop() }.rbButton(theme).disabled(runtime.phase == .stopping)
+                Button("Restart") { runtime.restart() }.rbButton(theme)
+                Button("Stop") { runtime.stop() }.rbButton(theme).disabled(runtime.phase == .stopping)
             } else {
                 Button {
                     runtime.start()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: d.action == .retry ? "arrow.clockwise" : "play.fill").font(.system(size: 9.5, weight: .bold))
-                        Text(d.action == .retry ? "Tentar de novo" : "Iniciar")
+                        Text(d.action == .retry ? "Try again" : "Start")
                     }
                 }
                 .rbButton(theme, prominent: true)
@@ -142,14 +142,14 @@ struct ServiceDetailView: View {
         if d.isExternal {
             // Sem histórico nem log: memória e CPU entram aqui.
             items = [
-                ("Porta", d.portLabel ?? "—"), ("PID", pid.map(String.init) ?? "—"), ("Memória", d.memory.map { Format.memory($0) } ?? "—"),
-                ("CPU", d.cpu.map { Format.cpu($0) } ?? "—"), ("Desde", since), ("No ar há", uptime),
+                ("Port", d.portLabel ?? "—"), ("PID", pid.map(String.init) ?? "—"), ("Memory", d.memory.map { Format.memory($0) } ?? "—"),
+                ("CPU", d.cpu.map { Format.cpu($0) } ?? "—"), ("Since", since), ("Uptime", uptime),
             ]
         } else {
             items = [
-                ("Porta", d.portLabel ?? "—"), ("PID", pid.map(String.init) ?? "—"), ("Processos", "\(runtime.processCount)"),
-                ("Desde", since), ("No ar há", uptime),
-                ("Último log", runtime.lastLogAt.map { Format.ago($0, now: model.now) } ?? "—"),
+                ("Port", d.portLabel ?? "—"), ("PID", pid.map(String.init) ?? "—"), ("Processes", "\(runtime.processCount)"),
+                ("Since", since), ("Uptime", uptime),
+                ("Last log", runtime.lastLogAt.map { Format.ago($0, now: model.now) } ?? "—"),
             ]
         }
         let rows = [Array(items.prefix(3)), Array(items.dropFirst(3))]
@@ -185,13 +185,13 @@ struct ServiceDetailView: View {
     private var charts: some View {
         if runtime.memHistory.count >= 2 {
             HStack(spacing: 8) {
-                BarHistory(title: "Memória", points: runtime.memHistory, floorAtZero: false) { Format.memory(UInt64(max(0, $0))) }
+                BarHistory(title: "Memory", points: runtime.memHistory, floorAtZero: false) { Format.memory(UInt64(max(0, $0))) }
                 BarHistory(title: "CPU", points: runtime.cpuHistory, floorAtZero: true) { Format.cpu($0) }
             }
         } else {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Coletando memória e CPU. Os gráficos aparecem em alguns segundos.")
+                Text("Collecting memory and CPU. Charts appear in a few seconds.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.rbText2)
             }
@@ -202,7 +202,7 @@ struct ServiceDetailView: View {
 
     private var command: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "Comando").padding(.leading, 2)
+            SectionLabel(text: "Command").padding(.leading, 2)
             HStack(spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("$").foregroundStyle(Color.rbText3)
@@ -214,7 +214,7 @@ struct ServiceDetailView: View {
                 .font(.system(size: 12, design: .monospaced))
                 .padding(.vertical, 9)
                 Spacer(minLength: 4)
-                Button(copied ? "Copiado" : "Copiar") {
+                Button(copied ? "Copied" : "Copy") {
                     Pasteboard.copy(runtime.config.command(port: runtime.expectedPort))
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
@@ -231,7 +231,7 @@ struct ServiceDetailView: View {
 
     private var folder: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "Pasta").padding(.leading, 2)
+            SectionLabel(text: "Folder").padding(.leading, 2)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     Image(systemName: "folder")
@@ -273,9 +273,9 @@ struct ServiceDetailView: View {
         let shape = RoundedRectangle(cornerRadius: theme.logRadius, style: .continuous)
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center) {
-                SectionLabel(text: "Saída").padding(.leading, 2)
+                SectionLabel(text: "Output").padding(.leading, 2)
                 Spacer()
-                Button("Abrir log completo") { NSWorkspace.shared.open(runtime.logURL) }
+                Button("Open full log") { NSWorkspace.shared.open(runtime.logURL) }
                     .buttonStyle(TextButtonStyle(accent: true, size: 11.5))
                     .padding(.trailing, -6)
             }
@@ -292,7 +292,7 @@ struct ServiceDetailView: View {
                             .id(line.id)
                     }
                     if runtime.logs.isEmpty {
-                        Text("Sem saída ainda. Inicie o serviço para acompanhar os logs aqui.")
+                        Text("No output yet. Start the service to follow its logs here.")
                             .font(.system(size: 12))
                             .foregroundStyle(Color(white: 0.68))
                             .frame(maxWidth: .infinity)
@@ -375,7 +375,7 @@ private struct BarHistory: View {
                 }
             }
             .frame(height: 44)
-            .accessibilityLabel("\(title) nos últimos \(minutes) minutos, agora \(format(points.last?.value ?? 0))")
+            .accessibilityLabel("\(title) over the last \(minutes) minutes, now \(format(points.last?.value ?? 0))")
             Text(caption(shown: hovered.map { buckets[$0] }))
                 .font(.system(size: 11))
                 .foregroundStyle(Color.rbText3)
@@ -399,10 +399,10 @@ private struct BarHistory: View {
     private func caption(shown: Metrics.Bucket?) -> String {
         if let shown, let last = points.last {
             let ago = Int(last.date.timeIntervalSince(shown.date) / 60)
-            return ago <= 0 ? "agora" : "há \(ago) min"
+            return ago <= 0 ? "now" : "\(ago) min ago"
         }
-        if minutes >= 30 { return "últimos 30 min" }
-        return minutes <= 1 ? "último minuto" : "últimos \(minutes) min"
+        if minutes >= 30 { return "last 30 min" }
+        return minutes <= 1 ? "last minute" : "last \(minutes) min"
     }
 }
 

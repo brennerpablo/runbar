@@ -63,10 +63,10 @@ public indirect enum JSON: Equatable, Sendable {
         switch self {
         case .null: return "null"
         case .bool: return "true/false"
-        case .number: return "número"
-        case .string: return "texto"
-        case .array: return "lista"
-        case .object: return "objeto"
+        case .number: return "a number"
+        case .string: return "a string"
+        case .array: return "a list"
+        case .object: return "an object"
         }
     }
 }
@@ -75,7 +75,7 @@ public struct JSONParseError: Error, Equatable, Sendable, CustomStringConvertibl
     public var message: String
     public var line: Int
     public var column: Int
-    public var description: String { "linha \(line), coluna \(column): \(message)" }
+    public var description: String { "line \(line), column \(column): \(message)" }
 }
 
 /// Parser JSON estrito, com mensagens em português e linha/coluna exatas.
@@ -91,10 +91,10 @@ public struct JSONParser {
         var p = JSONParser([UInt8](data))
         if p.b.count >= 3, p.b[0] == 0xEF, p.b[1] == 0xBB, p.b[2] == 0xBF { p.i = 3 }
         try p.skipSpace()
-        guard p.i < p.b.count else { throw p.fail("o arquivo está vazio") }
+        guard p.i < p.b.count else { throw p.fail("the file is empty") }
         let value = try p.value()
         try p.skipSpace()
-        if p.i < p.b.count { throw p.fail("texto sobrando depois do fim do JSON") }
+        if p.i < p.b.count { throw p.fail("extra text after the end of the JSON") }
         return value
     }
 
@@ -122,7 +122,7 @@ public struct JSONParser {
 
     private func describe(_ c: UInt8) -> String {
         if c >= 0x21 && c < 0x7F { return "'\(Character(Unicode.Scalar(c)))'" }
-        return "um caractere inesperado"
+        return "an unexpected character"
     }
 
     private mutating func skipSpace() throws {
@@ -132,7 +132,7 @@ public struct JSONParser {
                 step()
             case 0x2F:
                 let next = i + 1 < b.count ? b[i + 1] : 0
-                if next == 0x2F || next == 0x2A { throw fail("JSON não aceita comentários (// ou /* */)") }
+                if next == 0x2F || next == 0x2A { throw fail("JSON doesn't allow comments (// or /* */)") }
                 return
             default:
                 return
@@ -141,7 +141,7 @@ public struct JSONParser {
     }
 
     private mutating func value() throws -> JSON {
-        guard let c = cur else { throw fail("o arquivo terminou no meio de um valor") }
+        guard let c = cur else { throw fail("the file ended in the middle of a value") }
         switch c {
         case 0x7B: return try object()
         case 0x5B: return try array()
@@ -150,14 +150,14 @@ public struct JSONParser {
         case 0x66: try word("false"); return .bool(false)
         case 0x6E: try word("null"); return .null
         case 0x2D, 0x30...0x39: return .number(try number())
-        case 0x27: throw fail("use aspas duplas (\") em vez de aspas simples")
-        default: throw fail("valor inesperado: \(describe(c))")
+        case 0x27: throw fail("use double quotes (\") instead of single quotes")
+        default: throw fail("unexpected value: \(describe(c))")
         }
     }
 
     private mutating func word(_ w: String) throws {
         for expected in w.utf8 {
-            guard cur == expected else { throw fail("valor inválido; quis dizer \(w)?") }
+            guard cur == expected else { throw fail("invalid value; did you mean \(w)?") }
             step()
         }
     }
@@ -172,28 +172,28 @@ public struct JSONParser {
         }
         while true {
             try skipSpace()
-            guard let c = cur else { throw fail("faltou fechar o objeto com }") }
-            if c == 0x7D { throw fail("vírgula sobrando antes de }") }
-            if c == 0x27 { throw fail("use aspas duplas nas chaves") }
-            guard c == 0x22 else { throw fail("esperava uma chave entre aspas duplas, encontrei \(describe(c))") }
+            guard let c = cur else { throw fail("the object is missing its closing }") }
+            if c == 0x7D { throw fail("extra comma before }") }
+            if c == 0x27 { throw fail("use double quotes around keys") }
+            guard c == 0x22 else { throw fail("expected a key in double quotes, found \(describe(c))") }
             let pos = here
             let key = try string()
             if obj.entries.contains(where: { $0.key == key }) {
-                throw JSONParseError(message: "a chave \"\(key)\" aparece duas vezes no mesmo objeto", line: pos.line, column: pos.column)
+                throw JSONParseError(message: "the key \"\(key)\" appears twice in the same object", line: pos.line, column: pos.column)
             }
             try skipSpace()
-            guard cur == 0x3A else { throw fail("esperava : depois de \"\(key)\"") }
+            guard cur == 0x3A else { throw fail("expected : after \"\(key)\"") }
             step()
             try skipSpace()
             let v = try value()
             obj.entries.append(JSONObject.Entry(key: key, value: v, position: pos))
             try skipSpace()
-            guard let n = cur else { throw fail("faltou fechar o objeto com }") }
+            guard let n = cur else { throw fail("the object is missing its closing }") }
             switch n {
             case 0x2C: step()
             case 0x7D: step(); return .object(obj)
-            case 0x22: throw fail("faltou uma vírgula antes desta chave")
-            default: throw fail("esperava , ou } e encontrei \(describe(n))")
+            case 0x22: throw fail("missing a comma before this key")
+            default: throw fail("expected , or } but found \(describe(n))")
             }
         }
     }
@@ -208,15 +208,15 @@ public struct JSONParser {
         }
         while true {
             try skipSpace()
-            guard let c = cur else { throw fail("faltou fechar a lista com ]") }
-            if c == 0x5D { throw fail("vírgula sobrando antes de ]") }
+            guard let c = cur else { throw fail("the list is missing its closing ]") }
+            if c == 0x5D { throw fail("extra comma before ]") }
             items.append(try value())
             try skipSpace()
-            guard let n = cur else { throw fail("faltou fechar a lista com ]") }
+            guard let n = cur else { throw fail("the list is missing its closing ]") }
             switch n {
             case 0x2C: step()
             case 0x5D: step(); return .array(items)
-            default: throw fail("faltou uma vírgula entre os itens da lista")
+            default: throw fail("missing a comma between list items")
             }
         }
     }
@@ -225,16 +225,16 @@ public struct JSONParser {
         step()
         var out: [UInt8] = []
         while true {
-            guard let c = cur else { throw fail("texto sem aspas de fechamento") }
+            guard let c = cur else { throw fail("string is missing its closing quote") }
             if c == 0x22 {
                 step()
                 break
             }
-            if c == 0x0A { throw fail("quebra de linha dentro de um texto; use \\n") }
-            if c < 0x20 { throw fail("caractere de controle dentro de um texto") }
+            if c == 0x0A { throw fail("line break inside a string; use \\n") }
+            if c < 0x20 { throw fail("control character inside a string") }
             if c == 0x5C {
                 step()
-                guard let e = cur else { throw fail("texto sem aspas de fechamento") }
+                guard let e = cur else { throw fail("string is missing its closing quote") }
                 switch e {
                 case 0x22: out.append(0x22)
                 case 0x5C: out.append(0x5C)
@@ -248,18 +248,18 @@ public struct JSONParser {
                     step()
                     var scalar = try hex4()
                     if (0xD800...0xDBFF).contains(scalar) {
-                        guard cur == 0x5C, i + 1 < b.count, b[i + 1] == 0x75 else { throw fail("sequência \\u incompleta") }
+                        guard cur == 0x5C, i + 1 < b.count, b[i + 1] == 0x75 else { throw fail("incomplete \\u sequence") }
                         step()
                         step()
                         let low = try hex4()
-                        guard (0xDC00...0xDFFF).contains(low) else { throw fail("sequência \\u inválida") }
+                        guard (0xDC00...0xDFFF).contains(low) else { throw fail("invalid \\u sequence") }
                         scalar = 0x10000 + ((scalar - 0xD800) << 10) + (low - 0xDC00)
                     }
-                    guard let u = Unicode.Scalar(scalar) else { throw fail("sequência \\u inválida") }
+                    guard let u = Unicode.Scalar(scalar) else { throw fail("invalid \\u sequence") }
                     out.append(contentsOf: Array(String(Character(u)).utf8))
                     continue
                 default:
-                    throw fail("escape inválido \\\(describe(e))")
+                    throw fail("invalid escape \\\(describe(e))")
                 }
                 step()
                 continue
@@ -273,13 +273,13 @@ public struct JSONParser {
     private mutating func hex4() throws -> UInt32 {
         var v: UInt32 = 0
         for _ in 0..<4 {
-            guard let c = cur else { throw fail("sequência \\u incompleta") }
+            guard let c = cur else { throw fail("incomplete \\u sequence") }
             let d: UInt32
             switch c {
             case 0x30...0x39: d = UInt32(c - 0x30)
             case 0x41...0x46: d = UInt32(c - 0x41 + 10)
             case 0x61...0x66: d = UInt32(c - 0x61 + 10)
-            default: throw fail("sequência \\u inválida")
+            default: throw fail("invalid \\u sequence")
             }
             v = v * 16 + d
             step()
@@ -296,7 +296,7 @@ public struct JSONParser {
         let text = String(decoding: b[start..<i], as: UTF8.self)
         let grammar = #"^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$"#
         guard let d = Double(text), text.range(of: grammar, options: .regularExpression) != nil else {
-            throw JSONParseError(message: "número inválido: \(text)", line: startPos.line, column: startPos.column)
+            throw JSONParseError(message: "invalid number: \(text)", line: startPos.line, column: startPos.column)
         }
         return d
     }

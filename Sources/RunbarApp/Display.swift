@@ -14,7 +14,7 @@ struct ServiceDisplay {
 
     var dot: Dot = .stopped
     var action: Action = .start
-    var statusLabel = "Parado"
+    var statusLabel = "Stopped"
     var subtitle = ""
     var subtitleMono = false
     var warn = false
@@ -68,56 +68,56 @@ extension AppModel {
             d.isAlive = true
             d.dot = .busy
             d.action = .stop
-            d.statusLabel = "Subindo"
+            d.statusLabel = "Starting"
             d.portLabel = (rt.realPort ?? rt.expectedPort).map { ":\($0)" }
-            d.subtitle = "subindo…"
+            d.subtitle = "starting…"
             if let active = rt.activePort, let from = rt.fallbackFrom {
-                d.subtitle = "subindo na :\(active) · a :\(from) estava ocupada"
+                d.subtitle = "starting on :\(active) · :\(from) was taken"
             } else if let port, let owner = blocker(of: port), cfg.type != .docker {
-                d.subtitle = "subindo… a :\(port) está em uso por \(owner.label)"
+                d.subtitle = "starting… :\(port) is in use by \(owner.label)"
                 d.warn = true
             } else if rt.config.health != nil, rt.healthy == false {
-                d.subtitle = "esperando \(rt.config.health!) responder"
+                d.subtitle = "waiting for \(rt.config.health!) to respond"
             }
 
         case .running:
             d.isAlive = true
             d.action = .stop
             d.dot = .running
-            d.statusLabel = "Rodando"
+            d.statusLabel = "Running"
             let real = rt.realPort
             let expected = rt.expectedPort
             d.portLabel = (real ?? expected).map { ":\($0)" }
             d.url = cfg.url(port: real ?? expected)
-            let since = rt.startedAt.map { "desde \(Format.clock($0, now: now))" } ?? "rodando"
-            let log = rt.lastLogAt.map { "log \(Format.ago($0, now: now))" } ?? "sem log"
+            let since = rt.startedAt.map { "since \(Format.clock($0, now: now))" } ?? "running"
+            let log = rt.lastLogAt.map { "log \(Format.ago($0, now: now))" } ?? "no log"
             d.subtitle = "\(since) · \(log)"
             if let expected, let real, real != expected {
                 d.dot = .warning
                 d.warn = true
                 d.alert = true
-                d.statusLabel = "Porta trocada"
-                d.subtitle = "na :\(real) · esperava :\(expected)"
+                d.statusLabel = "Port changed"
+                d.subtitle = "on :\(real) · expected :\(expected)"
                 if let owner = blocker(of: expected) {
-                    d.banner = "A :\(expected) estava ocupada por \(owner.label), então o serviço subiu na :\(real)."
+                    d.banner = "Port :\(expected) was taken by \(owner.label), so the service started on :\(real)."
                     d.fix = fix(for: owner)
-                    d.fixLabel = owner.serviceID != nil ? "Parar \(owner.label) e reiniciar este" : "Encerrar \(owner.name) e reiniciar este"
+                    d.fixLabel = owner.serviceID != nil ? "Stop \(owner.label) and restart this one" : "Kill \(owner.name) and restart this one"
                 } else {
-                    d.banner = "O serviço está na :\(real), não na :\(expected). Confira se o comando fixa outra porta."
+                    d.banner = "The service is on :\(real), not :\(expected). Check whether the command sets a different port."
                 }
             } else if cfg.health != nil, rt.healthy == false {
                 d.dot = .warning
                 d.warn = true
                 d.alert = true
-                d.statusLabel = "Sem resposta"
-                d.subtitle = "\(cfg.health!) não está respondendo"
+                d.statusLabel = "Not responding"
+                d.subtitle = "\(cfg.health!) is not responding"
             } else if let active = rt.activePort, let from = rt.fallbackFrom {
-                d.subtitle = "\(since) · :\(from) ocupada"
-                var text = "A :\(from) estava ocupada, então este serviço subiu na :\(active) (autoPort)."
+                d.subtitle = "\(since) · :\(from) taken"
+                var text = "Port :\(from) was taken, so this service started on :\(active) (autoPort)."
                 if let owner = blocker(of: from) {
-                    text = "A :\(from) estava ocupada por \(owner.label), então este serviço subiu na :\(active) (autoPort)."
+                    text = "Port :\(from) was taken by \(owner.label), so this service started on :\(active) (autoPort)."
                     d.fix = fix(for: owner)
-                    d.fixLabel = owner.serviceID != nil ? "Parar \(owner.label) e voltar para a :\(from)" : "Encerrar \(owner.name) e voltar para a :\(from)"
+                    d.fixLabel = owner.serviceID != nil ? "Stop \(owner.label) and go back to :\(from)" : "Kill \(owner.name) and go back to :\(from)"
                 }
                 d.info = text
             }
@@ -126,8 +126,8 @@ extension AppModel {
             d.isAlive = true
             d.dot = .busy
             d.action = .stop
-            d.statusLabel = "Parando"
-            d.subtitle = "parando…"
+            d.statusLabel = "Stopping"
+            d.subtitle = "stopping…"
             d.portLabel = port.map { ":\($0)" }
 
         case .stopped where rt.external != nil:
@@ -135,40 +135,40 @@ extension AppModel {
             d.isExternal = true
             d.dot = .running
             d.action = .stop
-            d.statusLabel = "Fora do Runbar"
+            d.statusLabel = "Outside Runbar"
             d.memory = ext.memory
             d.cpu = ext.cpu
             let real = port.flatMap { ext.ports.contains($0) ? $0 : nil } ?? ext.ports.first
             d.realPort = real
             d.portLabel = (real ?? port).map { ":\($0)" }
             d.url = cfg.url(port: real)
-            d.subtitle = "fora do Runbar · desde \(Format.clock(ext.startedAt, now: now))"
+            d.subtitle = "outside Runbar · since \(Format.clock(ext.startedAt, now: now))"
             if let port, let real, real != port {
                 d.warn = true
                 d.alert = true
-                d.subtitle = "fora do Runbar · config :\(port)"
+                d.subtitle = "outside Runbar · config :\(port)"
             }
-            d.banner = "Este serviço foi iniciado fora do Runbar (no Terminal, por exemplo). Dá para ver porta, memória e CPU, mas não a saída. Pare e inicie pelo Runbar para acompanhar os logs."
+            d.banner = "This service was started outside Runbar (in Terminal, for example). Runbar shows its port, memory and CPU, but not its output. Stop it and start it from Runbar to follow its logs."
             d.fix = .takeOverExternal
-            d.fixLabel = "Parar e iniciar pelo Runbar"
+            d.fixLabel = "Stop and start from Runbar"
 
         case .stopped:
             d.action = .start
-            d.statusLabel = "Parado"
+            d.statusLabel = "Stopped"
             d.portLabel = port.map { ":\($0)" }
             if let port, let owner = blocker(of: port), cfg.autoPort, cfg.type != .docker {
-                d.subtitle = ":\(port) ocupada · sobe em outra porta"
-                d.info = "A :\(port) está em uso por \(owner.label). Com autoPort, este serviço sobe na próxima porta livre."
+                d.subtitle = ":\(port) taken · will start on another port"
+                d.info = "Port :\(port) is in use by \(owner.label). With autoPort, this service starts on the next free port."
                 d.fix = fix(for: owner)
-                d.fixLabel = owner.serviceID != nil ? "Parar \(owner.label) e usar a :\(port)" : "Encerrar \(owner.name) e usar a :\(port)"
+                d.fixLabel = owner.serviceID != nil ? "Stop \(owner.label) and use :\(port)" : "Kill \(owner.name) and use :\(port)"
             } else if let port, let owner = blocker(of: port) {
                 d.warn = true
-                d.subtitle = ":\(port) em uso por \(owner.label)"
-                d.banner = "A :\(port) está em uso por \(owner.label). Este serviço só sobe com a porta livre. Para subir em outra porta automaticamente, ligue \"autoPort\" no config.json."
+                d.subtitle = ":\(port) in use by \(owner.label)"
+                d.banner = "Port :\(port) is in use by \(owner.label). This service only starts when the port is free. To start on another port automatically, turn on \"autoPort\" in config.json."
                 d.fix = fix(for: owner)
-                d.fixLabel = owner.serviceID != nil ? "Parar \(owner.label) e iniciar este" : "Encerrar \(owner.name) e iniciar este"
+                d.fixLabel = owner.serviceID != nil ? "Stop \(owner.label) and start this one" : "Kill \(owner.name) and start this one"
             } else if rt.lastExitCode == 0, let exited = rt.exitedAt {
-                d.subtitle = "terminou \(Format.ago(exited, now: now)) (código 0)"
+                d.subtitle = "exited \(Format.ago(exited, now: now)) (code 0)"
             } else {
                 d.subtitle = cfg.command(port: nil)
                 d.subtitleMono = true
@@ -179,19 +179,19 @@ extension AppModel {
             d.action = .retry
             d.warn = true
             d.alert = true
-            d.statusLabel = "Caiu"
+            d.statusLabel = "Crashed"
             d.portLabel = port.map { ":\($0)" }
-            var reason = code.map { "código \($0)" } ?? "saiu sozinho"
-            if code == 127 { reason = "comando não encontrado (127)" }
-            d.subtitle = "Caiu — \(reason)" + (rt.lastLine.map { " · \($0)" } ?? "")
-            var text = "O processo terminou com \(reason)."
-            if code == 127 { text += " Confira se o programa está instalado e no PATH do shell de login." }
+            var reason = code.map { "exit code \($0)" } ?? "exited on its own"
+            if code == 127 { reason = "command not found (127)" }
+            d.subtitle = "Crashed — \(reason)" + (rt.lastLine.map { " · \($0)" } ?? "")
+            var text = code == nil ? "The process exited on its own." : "The process ended with \(reason)."
+            if code == 127 { text += " Check that the program is installed and on the login shell's PATH." }
             if let port, let owner = blocker(of: port) {
-                text += " A :\(port) está em uso por \(owner.label), o que costuma ser a causa."
+                text += " Port :\(port) is in use by \(owner.label), which is the usual cause."
                 d.fix = fix(for: owner)
-                d.fixLabel = owner.serviceID != nil ? "Parar \(owner.label) e tentar de novo" : "Encerrar \(owner.name) e tentar de novo"
+                d.fixLabel = owner.serviceID != nil ? "Stop \(owner.label) and try again" : "Kill \(owner.name) and try again"
             }
-            if rt.gaveUpRestarting { text += " Reiniciei 3 vezes em 2 minutos e parei de tentar." }
+            if rt.gaveUpRestarting { text += " Runbar restarted it 3 times in 2 minutes and stopped trying." }
             d.banner = text
 
         case .failed(let message):
@@ -199,18 +199,18 @@ extension AppModel {
             d.action = .retry
             d.warn = true
             d.alert = true
-            d.statusLabel = "Não subiu"
+            d.statusLabel = "Failed to start"
             d.subtitle = message
-            d.banner = "Não subiu: \(message)."
+            d.banner = "Failed to start: \(message)."
             d.portLabel = port.map { ":\($0)" }
             if let port, let owner = blocker(of: port) {
                 d.fix = fix(for: owner)
-                d.fixLabel = owner.serviceID != nil ? "Parar \(owner.label) e iniciar este" : "Encerrar \(owner.name) e iniciar este"
+                d.fixLabel = owner.serviceID != nil ? "Stop \(owner.label) and start this one" : "Kill \(owner.name) and start this one"
             }
         }
 
-        if rt.orphaned { d.subtitle = "fora do config.json · " + d.subtitle }
-        if rt.needsRestart { d.note = "A configuração mudou desde que este serviço subiu. Reinicie para aplicar." }
+        if rt.orphaned { d.subtitle = "not in config.json · " + d.subtitle }
+        if rt.needsRestart { d.note = "The configuration changed since this service started. Restart to apply it." }
         return d
     }
 }

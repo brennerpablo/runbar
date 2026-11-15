@@ -53,9 +53,9 @@ struct PopoverView: View {
             }
             if let issue = model.configError {
                 Banner(
-                    text: "O config.json tem um erro\(issue.line > 0 ? " na linha \(issue.line), coluna \(issue.column)" : ""): \(issue.message). Continuo usando a última versão válida.",
-                    actionLabel: "Abrir no editor", action: { model.openConfigFile() },
-                    secondaryLabel: "Copiar erro para o agente",
+                    text: "config.json has an error\(issue.line > 0 ? " at line \(issue.line), column \(issue.column)" : ""): \(issue.message). Runbar keeps using the last valid version.",
+                    actionLabel: "Open in editor", action: { model.openConfigFile() },
+                    secondaryLabel: "Copy error for your agent",
                     secondary: { Pasteboard.copy(AgentPrompt.fixError(issue)) }
                 )
                 .padding(.horizontal, t.gutter)
@@ -113,11 +113,11 @@ struct PopoverView: View {
             HStack(spacing: 2) {
                 Button { model.refresh() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(IconButtonStyle())
-                    .help("Reler o config.json e atualizar")
-                    .accessibilityLabel("Atualizar")
+                    .help("Reload config.json and refresh")
+                    .accessibilityLabel("Refresh")
                 Menu {
-                    Button("Pedir para um agente…") { openAgentWindow() }
-                    Button("Editar config.json") { model.openConfigFile() }
+                    Button("Ask an agent…") { openAgentWindow() }
+                    Button("Edit config.json") { model.openConfigFile() }
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -125,8 +125,8 @@ struct PopoverView: View {
                 .buttonStyle(IconButtonStyle())
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("Adicionar serviço")
-                .accessibilityLabel("Adicionar serviço")
+                .help("Add service")
+                .accessibilityLabel("Add service")
                 moreMenu
             }
         }
@@ -136,23 +136,23 @@ struct PopoverView: View {
     /// Tudo que morava no rodapé: configuração, visual, pastas e sair.
     private var moreMenu: some View {
         Menu {
-            Button("Abrir config.json") { model.openConfigFile() }
-            Button("Configurar com agente…") { openAgentWindow() }
+            Button("Open config.json") { model.openConfigFile() }
+            Button("Set up with an agent…") { openAgentWindow() }
             Divider()
-            Picker("Visual", selection: Binding(get: { model.config.settings.look }, set: { model.setLook($0) })) {
-                Text("Automático").tag(LookSetting.auto)
-                Text("Sólido").tag(LookSetting.solid)
+            Picker("Look", selection: Binding(get: { model.config.settings.look }, set: { model.setLook($0) })) {
+                Text("Automatic").tag(LookSetting.auto)
+                Text("Solid").tag(LookSetting.solid)
                 Text("Liquid Glass").tag(LookSetting.glass)
             }
             .disabled(model.configError != nil)
-            Toggle("Abrir ao iniciar sessão", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
+            Toggle("Open at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
             Divider()
-            Button("Instalar comando runbar no Terminal") { _ = model.installCLI() }
-            Button("Mostrar pasta da configuração") { model.revealConfigDir() }
-            Button("Abrir pasta de logs") { model.openLogsDir() }
+            Button("Install the runbar command") { _ = model.installCLI() }
+            Button("Show config folder") { model.revealConfigDir() }
+            Button("Open logs folder") { model.openLogsDir() }
             Divider()
-            Button("Sair e deixar os serviços rodando") { model.quit(stopServices: false) }
-            Button("Sair e parar os serviços") { model.quit(stopServices: true) }
+            Button("Quit and keep services running") { model.quit(stopServices: false) }
+            Button("Quit and stop services") { model.quit(stopServices: true) }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -160,21 +160,21 @@ struct PopoverView: View {
         .buttonStyle(IconButtonStyle())
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Mais opções")
-        .accessibilityLabel("Mais opções")
+        .help("More options")
+        .accessibilityLabel("More options")
     }
 
     private func tiles(_ t: Theme) -> some View {
         let running = model.runningCount
         let memory = Format.memory(model.totalMemory).split(separator: " ").map(String.init)
         return HStack(spacing: 8) {
-            StatTile(label: "Rodando", value: "\(running)", raised: true, live: running > 0) {
-                Text("de \(model.config.services.count)")
+            StatTile(label: "Running", value: "\(running)", raised: true, live: running > 0) {
+                Text("of \(model.config.services.count)")
                     .font(.system(size: 11.5))
                     .monospacedDigit()
                     .foregroundStyle(Color.rbText2)
             }
-            StatTile(label: "Memória", value: running > 0 ? (memory.first ?? "—") : "—", unit: running > 0 ? memory.dropFirst().first : nil) {
+            StatTile(label: "Memory", value: running > 0 ? (memory.first ?? "—") : "—", unit: running > 0 ? memory.dropFirst().first : nil) {
                 MiniBars(values: Metrics.buckets(model.totalHistory(\.memHistory), count: 7).map(\.value), floorAtZero: false)
             }
             StatTile(label: "CPU", value: running > 0 ? "\(Int(model.totalCPU.rounded()))" : "—", unit: running > 0 ? "%" : nil) {
@@ -186,7 +186,7 @@ struct PopoverView: View {
     /// Uma linha para o primeiro alerta; o toque abre o serviço.
     private func alertStrip(_ rt: ServiceRuntime, count: Int, _ t: Theme) -> some View {
         let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
-        let title = count == 1 ? "1 alerta" : "\(count) alertas"
+        let title = count == 1 ? "1 alert" : "\(count) alerts"
         return Button { selected = rt.id } label: {
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle")
@@ -209,12 +209,12 @@ struct PopoverView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title). \(rt.id): \(model.display(rt).subtitle)")
-        .accessibilityHint("Abrir detalhes")
+        .accessibilityHint("Open details")
     }
 
     private func listHeader(_ t: Theme) -> some View {
         HStack(alignment: .center, spacing: 6) {
-            Text("Serviços")
+            Text("Services")
                 .font(.system(size: 12.5, weight: .semibold))
             Text("\(model.groups.reduce(0) { $0 + $1.runtimes.count })")
                 .font(.system(size: 12.5))
@@ -233,7 +233,7 @@ struct PopoverView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.rbText2)
-            TextField("Buscar serviço ou porta", text: $query, prompt: Text("Buscar serviço ou porta").foregroundStyle(Color.rbText3))
+            TextField("Search services or ports", text: $query, prompt: Text("Search services or ports").foregroundStyle(Color.rbText3))
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .focused($searchFocused)
@@ -252,7 +252,7 @@ struct PopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(width: 22, height: 22)
-                .accessibilityLabel("Limpar busca")
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.leading, 12)
@@ -263,7 +263,7 @@ struct PopoverView: View {
         .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
         .background {
             // Atalho sem botão visível.
-            Button("Buscar") { searchFocused = true }
+            Button("Search") { searchFocused = true }
                 .keyboardShortcut("k", modifiers: .command)
                 .opacity(0)
                 .accessibilityHidden(true)
@@ -305,7 +305,7 @@ struct PopoverView: View {
             }
         }
         if isFiltering && !groups.contains(where: { $0.runtimes.contains(where: visible) }) {
-            Text("Nenhum serviço encontrado.")
+            Text("No matching services.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(Color.rbText2)
                 .frame(maxWidth: .infinity)
@@ -317,17 +317,17 @@ struct PopoverView: View {
         VStack(spacing: 8) {
             AppMark(size: 40)
                 .padding(.bottom, 4)
-            Text("Nenhum serviço configurado")
+            Text("No services configured")
                 .font(.system(size: 13.5, weight: .semibold))
-            Text("Peça para um agente montar o config.json ou edite o arquivo direto.")
+            Text("Ask an agent to set up config.json, or edit the file yourself.")
                 .font(.system(size: 12))
                 .lineSpacing(2)
                 .foregroundStyle(Color.rbText2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 280)
             HStack(spacing: 8) {
-                Button("Configurar com agente…") { openAgentWindow() }.rbButton(t, prominent: true)
-                Button("Abrir config.json") { model.openConfigFile() }.rbButton(t)
+                Button("Set up with an agent…") { openAgentWindow() }.rbButton(t, prominent: true)
+                Button("Open config.json") { model.openConfigFile() }.rbButton(t)
             }
             .padding(.top, 8)
         }
@@ -347,7 +347,7 @@ struct PopoverView: View {
                 HStack(spacing: 8) {
                     DisclosureChevron(open: showOthers)
                     let n = model.otherListeners.count
-                    Text(n == 1 ? "1 porta em uso fora do Runbar" : "\(n) portas em uso fora do Runbar")
+                    Text(n == 1 ? "1 port in use outside Runbar" : "\(n) ports in use outside Runbar")
                         .font(.system(size: 12))
                     Spacer()
                 }
@@ -356,7 +356,7 @@ struct PopoverView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHint(showOthers ? "Recolher" : "Expandir")
+            .accessibilityHint(showOthers ? "Collapse" : "Expand")
 
             if showOthers {
                 VStack(spacing: 0) {
@@ -368,7 +368,7 @@ struct PopoverView: View {
                             Text("PID \(l.pid)")
                                 .font(.system(size: 11, design: .monospaced))
                                 .foregroundStyle(Color.rbText2)
-                            Button("Encerrar") { model.killOther(pid: l.pid) }
+                            Button("Kill") { model.killOther(pid: l.pid) }
                                 .rbButton(t)
                                 .controlSize(.small)
                         }
@@ -435,11 +435,11 @@ private struct GroupSection: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(group.name), \(alive) de \(group.runtimes.count) rodando")
-                .accessibilityHint(isExpanded ? "Recolher" : "Expandir")
+                .accessibilityLabel("\(group.name), \(alive) of \(group.runtimes.count) running")
+                .accessibilityHint(isExpanded ? "Collapse" : "Expand")
 
                 if !group.isOrphanGroup {
-                    Button(allOn ? "Parar todos" : "Iniciar todos") {
+                    Button(allOn ? "Stop all" : "Start all") {
                         if allOn { model.stopAll(group) } else { model.startAll(group) }
                     }
                     .buttonStyle(TextButtonStyle(accent: !allOn, size: 11.5))
@@ -499,7 +499,7 @@ private struct ServiceRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(runtime.id), \(d.statusLabel)")
-            .accessibilityHint("Abrir detalhes")
+            .accessibilityHint("Open details")
 
             if let memory = d.memory {
                 VStack(alignment: .trailing, spacing: 2) {
@@ -511,7 +511,7 @@ private struct ServiceRow: View {
                 }
                 .lineLimit(1)
                 .frame(width: Layout.metricsWidth, alignment: .trailing)
-                .help("Memória e CPU do processo e dos filhos")
+                .help("Memory and CPU of the process and its children")
                 .accessibilityElement(children: .combine)
             }
 
@@ -519,7 +519,7 @@ private struct ServiceRow: View {
                 if let url = d.url, runtime.phase == .running || d.isExternal {
                     Button { NSWorkspace.shared.open(url) } label: { Pill(text: label, tone: d.warn ? .warn : .live) }
                         .buttonStyle(.plain)
-                        .help("Abrir \(url.absoluteString)")
+                        .help("Open \(url.absoluteString)")
                 } else {
                     Pill(text: label)
                 }
@@ -547,9 +547,9 @@ private struct ServiceRow: View {
 
     private func actionHelp(_ d: ServiceDisplay) -> String {
         switch d.action {
-        case .start: return "Iniciar \(runtime.id)"
-        case .stop: return "Parar \(runtime.id)"
-        case .retry: return "Tentar iniciar \(runtime.id) de novo"
+        case .start: return "Start \(runtime.id)"
+        case .stop: return "Stop \(runtime.id)"
+        case .retry: return "Try starting \(runtime.id) again"
         }
     }
 }

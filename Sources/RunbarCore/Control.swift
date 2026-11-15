@@ -98,7 +98,7 @@ public enum ControlError: Error, CustomStringConvertible {
     case io(String)
     public var description: String {
         switch self {
-        case .notRunning: return "o Runbar não está aberto"
+        case .notRunning: return "Runbar is not open"
         case .io(let m): return m
         }
     }
@@ -110,7 +110,7 @@ enum UnixSocket {
         addr.sun_family = sa_family_t(AF_UNIX)
         let bytes = Array(path.utf8)
         let capacity = MemoryLayout.size(ofValue: addr.sun_path)
-        guard bytes.count < capacity else { throw ControlError.io("caminho do socket longo demais") }
+        guard bytes.count < capacity else { throw ControlError.io("socket path is too long") }
         withUnsafeMutableBytes(of: &addr.sun_path) { raw in
             raw.copyBytes(from: bytes)
             raw[bytes.count] = 0
@@ -138,7 +138,7 @@ enum UnixSocket {
             var sent = 0
             while sent < raw.count {
                 let n = write(fd, raw.baseAddress! + sent, raw.count - sent)
-                if n <= 0 { throw ControlError.io("falha ao escrever no socket") }
+                if n <= 0 { throw ControlError.io("failed to write to the socket") }
                 sent += n
             }
         }
@@ -160,7 +160,7 @@ enum UnixSocket {
 public enum ControlClient {
     public static func send(_ request: ControlRequest, path: String = Paths.socketPath, timeout: TimeInterval = 5) throws -> ControlResponse {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw ControlError.io("não consegui abrir um socket") }
+        guard fd >= 0 else { throw ControlError.io("couldn't open a socket") }
         defer { close(fd) }
         UnixSocket.configure(fd, timeout: timeout)
         var addr = try UnixSocket.address(path)
@@ -170,7 +170,7 @@ public enum ControlClient {
         try UnixSocket.writeAll(fd, data)
         shutdown(fd, SHUT_WR)
         let reply = UnixSocket.readAll(fd)
-        guard !reply.isEmpty else { throw ControlError.io("o Runbar não respondeu") }
+        guard !reply.isEmpty else { throw ControlError.io("Runbar didn't respond") }
         return try ControlCoding.decoder().decode(ControlResponse.self, from: reply)
     }
 
@@ -197,11 +197,11 @@ public final class ControlServer {
         try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         unlink(path)
         fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw ControlError.io("socket() falhou") }
+        guard fd >= 0 else { throw ControlError.io("socket() failed") }
         var addr = try UnixSocket.address(path)
-        guard UnixSocket.withSockaddr(&addr, { bind(fd, $0, $1) }) == 0 else { throw ControlError.io("bind() falhou: \(String(cString: strerror(errno)))") }
+        guard UnixSocket.withSockaddr(&addr, { bind(fd, $0, $1) }) == 0 else { throw ControlError.io("bind() failed: \(String(cString: strerror(errno)))") }
         chmod(path, 0o600)
-        guard listen(fd, 16) == 0 else { throw ControlError.io("listen() falhou") }
+        guard listen(fd, 16) == 0 else { throw ControlError.io("listen() failed") }
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
         let src = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         src.setEventHandler { [weak self] in self?.acceptPending() }
@@ -230,7 +230,7 @@ public final class ControlServer {
         UnixSocket.configure(client, timeout: 3)
         let data = UnixSocket.readAll(client, until: 0x0A, limit: 1_000_000)
         guard let request = try? ControlCoding.decoder().decode(ControlRequest.self, from: data) else {
-            respond(client, ControlResponse(ok: false, error: "pedido inválido"))
+            respond(client, ControlResponse(ok: false, error: "invalid request"))
             return
         }
         handler(request) { [weak self] response in
