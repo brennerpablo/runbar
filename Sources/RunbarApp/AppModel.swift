@@ -49,6 +49,8 @@ final class AppModel {
     private(set) var otherListeners: [Listener] = []
     private(set) var now = Date()
     private(set) var launchAtLogin = false
+    /// Alerts the user dismissed while their situation still holds, by service: the alert's key.
+    private(set) var mutedAlerts: [String: String] = [:]
 
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var control: ControlServer?
@@ -303,6 +305,7 @@ final class AppModel {
     private func tick() {
         now = Date()
         tickCount += 1
+        pruneMutedAlerts()
         if LogTailer.modificationDate(Paths.configFile) != lastConfigStamp { reloadConfig() }
         runtimes.values.forEach { $0.pollLog() }
         if tickCount % 3 == 0 { runHealthChecks() }
@@ -554,6 +557,30 @@ final class AppModel {
     /// Services with an alert, in list order.
     var alertingServices: [ServiceRuntime] {
         groups.flatMap(\.runtimes).filter { display($0).alert }
+    }
+
+    /// Dismiss the service's alert. A crash or a failed start is over: the service becomes stopped (the log
+    /// keeps what happened). A situation that still holds (port changed, started outside Runbar on another
+    /// port, not responding) goes quiet until it changes or ends.
+    func dismissAlert(_ id: String) {
+        guard let rt = runtimes[id] else { return }
+        switch rt.phase {
+        case .crashed, .failed:
+            rt.stop()
+        default:
+            let d = display(rt)
+            if d.alert { mutedAlerts[id] = d.alertKey }
+        }
+    }
+
+    /// A dismissed alert whose situation changed or ended stops being dismissed, so the next one shows.
+    func pruneMutedAlerts() {
+        for id in mutedAlerts.keys {
+            guard let rt = runtimes[id], display(rt).dismissed else {
+                mutedAlerts[id] = nil
+                continue
+            }
+        }
     }
 
     /// Summed history of live services. They are all sampled at the same instant, so the sum is per date.

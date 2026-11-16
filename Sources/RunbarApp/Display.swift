@@ -32,6 +32,11 @@ struct ServiceDisplay {
     var fix: FixAction?
     var fixLabel: String?
     var note: String?
+    /// The alert is still true but the user dismissed it: no strip, no menu bar badge, no count.
+    var dismissed = false
+
+    /// Identifies one alert: the same text means the same situation.
+    var alertKey: String { "\(statusLabel)|\(subtitle)" }
 
     var actionSymbol: String {
         switch action {
@@ -167,8 +172,10 @@ extension AppModel {
                 d.banner = "Port :\(port) is in use by \(owner.label). This service only starts when the port is free. To start on another port automatically, turn on \"autoPort\" in config.json."
                 d.fix = fix(for: owner)
                 d.fixLabel = owner.serviceID != nil ? "Stop \(owner.label) and start this one" : "Kill \(owner.name) and start this one"
-            } else if rt.lastExitCode == 0, let exited = rt.exitedAt {
-                d.subtitle = "exited \(Format.ago(exited, now: now)) (code 0)"
+            } else if let code = rt.lastExitCode, let exited = rt.exitedAt {
+                // A crash the user dismissed stays visible here, in grey, until the next start.
+                let ago = Format.ago(exited, now: now)
+                d.subtitle = code == 0 ? "exited \(ago) (code 0)" : "crashed \(ago) (exit code \(code))"
             } else {
                 d.subtitle = cfg.command(port: nil)
                 d.subtitleMono = true
@@ -211,6 +218,10 @@ extension AppModel {
 
         if rt.orphaned { d.subtitle = "not in config.json · " + d.subtitle }
         if rt.needsRestart { d.note = "The configuration changed since this service started. Restart to apply it." }
+        if d.alert, mutedAlerts[rt.id] == d.alertKey {
+            d.alert = false
+            d.dismissed = true
+        }
         return d
     }
 }

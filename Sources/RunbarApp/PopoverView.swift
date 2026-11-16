@@ -252,29 +252,46 @@ struct PopoverView: View {
     private func alertStrip(_ rt: ServiceRuntime, count: Int, _ t: Theme) -> some View {
         let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         let title = count == 1 ? "1 alert" : "\(count) alerts"
-        return Button { selected = rt.id } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 11.5, weight: .semibold))
-                Text("\(Text(title).fontWeight(.semibold)) · \(rt.id): \(model.display(rt).subtitle)")
-                    .font(.system(size: 12))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+        let d = model.display(rt)
+        return HStack(spacing: 0) {
+            Button { selected = rt.id } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11.5, weight: .semibold))
+                    Text("\(Text(title).fontWeight(.semibold)) · \(rt.id): \(d.subtitle)")
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .padding(.leading, 11)
+                .padding(.trailing, 8)
+                .frame(height: 34)
+                .contentShape(Rectangle())
             }
-            .foregroundStyle(Color.rbWarn)
-            .padding(.leading, 11)
-            .padding(.trailing, 9)
-            .frame(height: 34)
-            .background(Color.rbWarnSoft, in: shape)
-            .overlay(shape.strokeBorder(Color.rbWarnBorder))
-            .contentShape(shape)
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(title). \(rt.id): \(d.subtitle)")
+            .accessibilityHint("Open details")
+            Rectangle()
+                .fill(Color.rbWarnBorder)
+                .frame(width: 1, height: 18)
+            Button {
+                withAnimation(.snappy(duration: 0.2)) { model.dismissAlert(rt.id) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .frame(width: 34, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(DismissText.help(rt))
+            .accessibilityLabel("Dismiss the alert for \(rt.id)")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(title). \(rt.id): \(model.display(rt).subtitle)")
-        .accessibilityHint("Open details")
+        .foregroundStyle(Color.rbWarn)
+        .background(Color.rbWarnSoft, in: shape)
+        .overlay(shape.strokeBorder(Color.rbWarnBorder))
     }
 
     private func listHeader(_ t: Theme) -> some View {
@@ -602,6 +619,14 @@ private struct ServiceRow: View {
         .frame(height: Layout.rowHeight)
         .background(hover ? Color.rbControl.opacity(0.6) : Color.clear)
         .onHover { hover = $0 }
+        .contextMenu {
+            if d.alert {
+                Button("Dismiss alert") { model.dismissAlert(runtime.id) }
+                    .help(DismissText.help(runtime))
+                Divider()
+            }
+            Button("Open full log") { NSWorkspace.shared.open(runtime.logURL) }
+        }
     }
 
     private func actionTone(_ d: ServiceDisplay) -> RowActionButtonStyle.Tone {
@@ -617,6 +642,17 @@ private struct ServiceRow: View {
         case .start: return "Start \(runtime.id)"
         case .stop: return "Stop \(runtime.id)"
         case .retry: return "Try starting \(runtime.id) again"
+        }
+    }
+}
+
+/// What dismissing an alert does, in the words of its tooltip.
+enum DismissText {
+    @MainActor
+    static func help(_ rt: ServiceRuntime) -> String {
+        switch rt.phase {
+        case .crashed, .failed: return "Dismiss: mark \(rt.id) as stopped"
+        default: return "Dismiss until this changes"
         }
     }
 }

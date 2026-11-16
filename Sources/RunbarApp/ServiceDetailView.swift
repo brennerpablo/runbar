@@ -32,7 +32,11 @@ struct ServiceDetailView: View {
                 VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
                     header(d)
                     if let banner = d.banner {
-                        Banner(text: banner, actionLabel: d.fixLabel, action: d.fix.map { fix in { model.perform(fix, for: runtime) } })
+                        Banner(
+                            text: banner, actionLabel: d.fixLabel, action: d.fix.map { fix in { model.perform(fix, for: runtime) } },
+                            secondaryLabel: d.alert ? "Dismiss" : nil,
+                            secondary: { withAnimation(.snappy(duration: 0.2)) { model.dismissAlert(runtime.id) } }
+                        )
                     } else if let info = d.info {
                         Banner(text: info, tone: .info, actionLabel: d.fixLabel, action: d.fix.map { fix in { model.perform(fix, for: runtime) } })
                     }
