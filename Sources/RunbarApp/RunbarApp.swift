@@ -34,6 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DemoShots.run(into: URL(fileURLWithPath: args[i + 1], isDirectory: true))
             return
         }
+        if let i = args.firstIndex(of: "--panel-shots"), i + 1 < args.count {
+            DemoShots.runPanels(into: URL(fileURLWithPath: args[i + 1], isDirectory: true))
+            return
+        }
         #endif
         AppModel.shared.start()
         StatusBarController.shared.install()

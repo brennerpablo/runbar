@@ -27,6 +27,28 @@ enum DemoShots {
         exit(0)
     }
 
+    /// `--panel-shots <dir>`: the same views alone on a transparent background (dark), shadow included,
+    /// for pages that draw their own backdrop (the landing page at runbar.pbrenner.com).
+    static func runPanels(into dir: URL) {
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let model = AppModel.shared
+        load(model)
+        func alone<V: View>(_ view: V, radius: CGFloat? = nil) -> some View { panel(view, radius: radius).padding(48) }
+        var written: [String] = []
+        DiskModel.shared.confirming = nil
+        written.append(render(alone(PopoverView().environment(model)), name: "panel-list", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "acme-web").environment(model)), name: "panel-detail", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialTab: .disk).environment(model)), name: "panel-disk", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "finch-app").environment(model)), name: "panel-conflict", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "moonbase-db").environment(model)), name: "panel-outside", dir: dir, dark: true))
+        DiskModel.shared.confirming = Self.path("acme/acme-web/node_modules")
+        written.append(render(alone(PopoverView(initialTab: .disk, initialQuery: "node_modules").environment(model)), name: "panel-reinstall", dir: dir, dark: true))
+        DiskModel.shared.confirming = nil
+        written.append(render(alone(agentWindow(model), radius: 12), name: "panel-agent", dir: dir, dark: true))
+        print(written.joined(separator: "\n"))
+        exit(0)
+    }
+
     // MARK: - Layouts
 
     /// The three main views side by side: services, a running service, disk.
