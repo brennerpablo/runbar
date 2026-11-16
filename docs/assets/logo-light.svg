@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="196" height="56" viewBox="0 0 196 56" role="img" aria-label="Runbar">
+  <rect x="2" y="4" width="48" height="48" rx="15" fill="#17A865" fill-opacity="0.14"/>
+  <g transform="translate(10.5 12) scale(1.95)" fill="none" stroke="#086B3C" stroke-width="1.4">
+    <rect x="1.5" y="2.2" width="13" height="4.8" rx="1.6"/>
+    <rect x="1.5" y="9" width="13" height="4.8" rx="1.6"/>
+    <circle cx="4.5" cy="4.6" r="0.9" fill="#086B3C" stroke="none"/>
+    <circle cx="4.5" cy="11.4" r="0.9" fill="#086B3C" stroke="none"/>
+  </g>
+  <text x="64" y="39" fill="#151A21" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="34" font-weight="650" letter-spacing="-0.6">Runbar</text>
+</svg>

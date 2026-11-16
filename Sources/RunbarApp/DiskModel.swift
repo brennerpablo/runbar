@@ -382,3 +382,20 @@ final class DiskModel {
         return s < 60 ? "\(s) s" : "\(s / 60)m \(String(format: "%02d", s % 60))s"
     }
 }
+
+#if DEBUG
+extension DiskModel {
+    /// README screenshots: made-up measurements, nothing scanned.
+    func loadDemo(projects: [ProjectDisk], free: UInt64, capacity: UInt64, scannedAt: Date, confirming: String? = nil) {
+        self.projects = projects.sorted { $0.total > $1.total }
+        freeBytes = free
+        capacityBytes = capacity
+        self.scannedAt = scannedAt
+        scanning = []
+        jobs = [:]
+        results = []
+        self.confirming = confirming
+    }
+}
+#endif
+

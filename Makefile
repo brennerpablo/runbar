@@ -1,4 +1,4 @@
-.PHONY: build app install run clean
+.PHONY: build app install run clean screenshots
 
 build:
 	swift build
@@ -14,3 +14,6 @@ run: app
 
 clean:
 	rm -rf .build build
+
+screenshots:
+	scripts/screenshots.sh

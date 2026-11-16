@@ -29,6 +29,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshotter.run(into: URL(fileURLWithPath: args[i + 1], isDirectory: true), detail: args.dropFirst(i + 2).first)
             return
         }
+        #if DEBUG
+        if let i = args.firstIndex(of: "--readme-shots"), i + 1 < args.count {
+            DemoShots.run(into: URL(fileURLWithPath: args[i + 1], isDirectory: true))
+            return
+        }
+        #endif
         AppModel.shared.start()
         StatusBarController.shared.install()
         // First disk measurement a little after launch, in the background, so the Disk tile has a number.

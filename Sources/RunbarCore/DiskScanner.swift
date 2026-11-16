@@ -41,6 +41,22 @@ public struct DiskItem: Sendable, Identifiable, Equatable {
     public var installSource: String?
     /// "Python 3.12" for virtualenvs.
     public var detail: String?
+
+    public init(id: String, name: String, category: DiskCategory, paths: [String], bytes: UInt64, folder: String, parent: String,
+                serviceID: String? = nil, worktree: Bool = false, install: String? = nil, installSource: String? = nil, detail: String? = nil) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.paths = paths
+        self.bytes = bytes
+        self.folder = folder
+        self.parent = parent
+        self.serviceID = serviceID
+        self.worktree = worktree
+        self.install = install
+        self.installSource = installSource
+        self.detail = detail
+    }
 }
 
 public struct ProjectDisk: Sendable, Identifiable, Equatable {
@@ -53,6 +69,15 @@ public struct ProjectDisk: Sendable, Identifiable, Equatable {
     public var worktreeCount: Int
     /// Leftovers from a delete that didn't finish (`.runbar-deleting-*`).
     public var leftovers: [String]
+
+    public init(id: String, name: String, root: String, items: [DiskItem], worktreeCount: Int = 0, leftovers: [String] = []) {
+        self.id = id
+        self.name = name
+        self.root = root
+        self.items = items
+        self.worktreeCount = worktreeCount
+        self.leftovers = leftovers
+    }
 
     public var total: UInt64 { items.reduce(0) { $0 + $1.bytes } }
     public var worktreeBytes: UInt64 { items.filter(\.worktree).reduce(0) { $0 + $1.bytes } }

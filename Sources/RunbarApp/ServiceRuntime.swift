@@ -476,3 +476,31 @@ final class ServiceRuntime: Identifiable {
         if listeningOK && (config.health == nil || healthy == true) { phase = .running }
     }
 }
+
+#if DEBUG
+extension ServiceRuntime {
+    /// README screenshots: puts the service in a made-up state (no process behind it).
+    func loadDemo(phase: Phase, pid: Int32? = nil, startedAt: Date? = nil, lastLogAt: Date? = nil, exitedAt: Date? = nil,
+                  exitCode: Int32? = nil, memoryMB: Double = 0, cpu: Double = 0, processCount: Int = 0, listening: [Int] = [],
+                  memHistoryMB: [Double] = [], cpuSeries: [Double] = [], at now: Date, logs: [String] = [], external: ExternalRun? = nil) {
+        self.phase = phase
+        self.pid = pid
+        self.startedAt = startedAt
+        self.lastLogAt = lastLogAt
+        self.exitedAt = exitedAt
+        self.lastExitCode = exitCode
+        self.memory = UInt64(memoryMB * 1_048_576)
+        self.cpu = cpu
+        self.processCount = processCount
+        self.listening = listening
+        self.external = external
+        func points(_ values: [Double], _ scale: Double) -> [MetricPoint] {
+            values.enumerated().map { MetricPoint(id: $0.offset, date: now.addingTimeInterval(Double($0.offset - values.count + 1) * 15), value: $0.element * scale) }
+        }
+        self.memHistory = points(memHistoryMB, 1_048_576)
+        self.cpuHistory = points(cpuSeries, 1)
+        self.logs = logs.enumerated().map { LogLine(id: $0.offset, text: $0.element) }
+    }
+}
+#endif
+

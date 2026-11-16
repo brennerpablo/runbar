@@ -632,3 +632,21 @@ final class AppModel {
         return FileManager.default.fileExists(atPath: guess) ? "~/Documents/repos" : "~"
     }
 }
+
+#if DEBUG
+extension AppModel {
+    /// README screenshots: a made-up config and machine state, with nothing read from this Mac.
+    func loadDemo(config: RunbarConfig, now: Date, portOwners: [Int: PortOwner], otherListeners: [Listener]) {
+        snapshotMode = true
+        self.config = config
+        configError = nil
+        configWarnings = []
+        configLoadedAt = now
+        syncRuntimes()
+        self.now = now
+        self.portOwners = portOwners
+        self.otherListeners = otherListeners
+    }
+}
+#endif
+

@@ -218,7 +218,7 @@ struct StatTile<Trailing: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 // The label never truncates; the note gives way first.
                 Text(label)
                     .font(.system(size: 11.5))
@@ -228,7 +228,7 @@ struct StatTile<Trailing: View>: View {
                 Spacer(minLength: 0)
                 if let note {
                     Text(note)
-                        .font(.system(size: 11))
+                        .font(.system(size: 10.5))
                         .monospacedDigit()
                         .foregroundStyle(noteColor)
                         .lineLimit(1)

@@ -13,6 +13,7 @@ struct PopoverView: View {
     @ViewState private var selected: String?
     var initialSelection: String?
     var initialTab: PanelTab?
+    var initialQuery: String?
     @ViewState private var tab: PanelTab = .services
     @ViewState private var query = ""
     @ViewState private var filter: StatusFilter = .all
@@ -37,6 +38,7 @@ struct PopoverView: View {
             prepareExpanded()
             if selected == nil, let initialSelection { selected = initialSelection }
             if let initialTab { tab = initialTab }
+            if let initialQuery { query = initialQuery }
         }
     }
 
