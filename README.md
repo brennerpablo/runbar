@@ -10,6 +10,7 @@
 ![macOS 15+](https://img.shields.io/badge/macOS-15+-4ADE9A?style=flat-square&labelColor=151A22&logo=apple&logoColor=4ADE9A)
 ![Command Line Tools](https://img.shields.io/badge/builds_with-Command_Line_Tools-4ADE9A?style=flat-square&labelColor=151A22)
 ![Config](https://img.shields.io/badge/config-one_JSON_file-4ADE9A?style=flat-square&labelColor=151A22)
+[![License: MIT](https://img.shields.io/badge/license-MIT-4ADE9A?style=flat-square&labelColor=151A22)](LICENSE)
 <br>
 ![Swift](https://img.shields.io/badge/Swift_6-151A22?style=flat-square&logo=swift&logoColor=4ADE9A)
 ![SwiftUI](https://img.shields.io/badge/SwiftUI-151A22?style=flat-square&logo=swift&logoColor=4ADE9A)
@@ -239,3 +240,7 @@ To uninstall: quit Runbar, delete `~/Applications/Runbar.app` and the `runbar` l
 `~/Library/Logs/Runbar`.
 
 </details>
+
+## License
+
+MIT. See [LICENSE](LICENSE).
