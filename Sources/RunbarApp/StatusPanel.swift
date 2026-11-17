@@ -65,9 +65,21 @@ final class PanelController: NSObject, NSWindowDelegate {
     private var previousApp: NSRunningApplication?
     private var resignActive: NSObjectProtocol?
 
-    func toggle() { isOpen ? close(restoreFocus: true) : open() }
+    /// Uptime when a click on the icon closed the panel before the icon's action arrived (see `dismiss`).
+    private var closedByIconClick: TimeInterval?
+
+    func toggle() {
+        if isOpen { return close(restoreFocus: true) }
+        // The panel already closed on this click: leave it closed.
+        if let closed = closedByIconClick, ProcessInfo.processInfo.systemUptime - closed < 1 {
+            closedByIconClick = nil
+            return
+        }
+        open()
+    }
 
     func open() {
+        closedByIconClick = nil
         let panel = self.panel ?? makePanel()
         self.panel = panel
         DiskModel.shared.refreshFreeSpace()
@@ -79,7 +91,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
         if resignActive == nil {
             resignActive = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.close() }
+                MainActor.assumeIsolated { self?.dismiss() }
             }
         }
         // The button unhighlights itself on mouse up; highlight it again once the click is done.
@@ -92,9 +104,19 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
         if outsideClick == nil {
             outsideClick = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
-                MainActor.assumeIsolated { self?.close() }
+                MainActor.assumeIsolated { self?.dismiss() }
             }
         }
+    }
+
+    /// Closes because a click or focus went elsewhere. On recent macOS the menu bar is drawn by another
+    /// process, so a click on the icon counts as elsewhere too and closes the panel before the icon's
+    /// action arrives; that action must then leave the panel closed instead of opening it again.
+    private func dismiss() {
+        if isOpen, let icon = statusButton?.window?.frame, icon.contains(NSEvent.mouseLocation) {
+            closedByIconClick = ProcessInfo.processInfo.systemUptime
+        }
+        close()
     }
 
     /// `restoreFocus`: closed with Esc or the icon, so focus goes back to the previous app. On a click
@@ -123,7 +145,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// With Runbar active, losing focus means the agent window opened or the app left the front: close.
     /// With Runbar inactive, another app took focus back without a user click; the panel stays open.
     func windowDidResignKey(_ notification: Notification) {
-        if NSApp.isActive { close() }
+        if NSApp.isActive { dismiss() }
     }
 
     private func makePanel() -> RunbarPanel {
