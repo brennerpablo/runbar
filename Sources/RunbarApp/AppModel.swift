@@ -237,9 +237,16 @@ final class AppModel {
     }
 
     func stopAll(_ group: ServiceGroup) {
-        for rt in group.runtimes {
-            if rt.isAlive { rt.stop() } else if rt.external != nil { rt.stopExternal() }
-        }
+        group.runtimes.forEach(stopIfRunning)
+    }
+
+    /// The header's Stop all: everything the Running tile counts, in config.json or not, started here or outside.
+    func stopAllServices() {
+        runtimes.values.forEach(stopIfRunning)
+    }
+
+    private func stopIfRunning(_ rt: ServiceRuntime) {
+        if rt.isAlive { rt.stop() } else if rt.external != nil { rt.stopExternal() }
     }
 
     /// Stops whoever holds the port and (re)starts the service.
@@ -339,7 +346,7 @@ final class AppModel {
         // Services started outside Runbar: something listening on a port, running in the service's folder.
         var byCwd: [String: [Int32]] = [:]
         for pid in snap.listening.keys.sorted() where managed[pid] == nil && pid != me {
-            guard let cwd = snap.cwds[pid], !(snap.paths[pid] ?? "").contains(".app/Contents/") else { continue }
+            guard let cwd = snap.cwds[pid], !snap.isTool(pid) else { continue }
             byCwd[cwd, default: []].append(pid)
         }
         var cwdUse: [String: Int] = [:]
@@ -348,7 +355,9 @@ final class AppModel {
         for rt in runtimes.values.sorted(by: { $0.id < $1.id }) where !rt.isAlive {
             let candidates = (byCwd[rt.config.cwd] ?? []).filter { !claimed.contains($0) }
             let byPort = candidates.first { pid in rt.config.port.map { snap.listening[pid]?.contains($0) == true } ?? false }
-            let pick = byPort ?? (cwdUse[rt.config.cwd] == 1 ? candidates.first : nil)
+            // On another port (started in Terminal with a different one): only a port a dev server would pick.
+            let onOtherPort = candidates.first { pid in snap.listening[pid]?.contains { !ProcSnapshot.isEphemeral($0) } == true }
+            let pick = byPort ?? (cwdUse[rt.config.cwd] == 1 ? onOtherPort : nil)
             guard let pick else {
                 rt.applyExternal(root: nil, snap: snap)
                 continue
@@ -368,7 +377,7 @@ final class AppModel {
                 owners[port] = PortOwner(pid: pid, name: name, serviceID: managed[pid])
                 let system = ["/System/", "/usr/libexec/", "/usr/sbin/", "/Library/Apple/"].contains { path.hasPrefix($0) }
                     || (path.contains(".app/Contents/") && !["Docker", "OrbStack", "Postgres"].contains { path.contains($0) })
-                if managed[pid] == nil, !system, port < 49152, others[port] == nil {
+                if managed[pid] == nil, !system, !ProcSnapshot.isEphemeral(port), others[port] == nil {
                     others[port] = Listener(port: port, pid: pid, name: name, path: path)
                 }
             }

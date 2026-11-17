@@ -185,15 +185,31 @@ public struct ProcSnapshot: Sendable {
 
     private static let shells: Set<String> = ["zsh", "bash", "sh", "fish", "login", "tmux", "screen", "launchd", "-zsh", "-bash"]
 
-    /// Walks up the tree while the parent runs in the same folder and isn't a shell
+    /// Walks up the tree while the parent runs in the same folder and isn't a shell or a tool
     /// (e.g. next-server → node → npm), to measure the whole service.
     public func serviceRoot(from pid: Int32, cwd: String) -> Int32 {
         var current = pid
         let me = getuid()
         while let s = procs[current], let parent = procs[s.ppid], parent.pid > 1, parent.uid == me,
-              !Self.shells.contains(parent.name), ProcScanner.cwd(pid: parent.pid) == cwd {
+              !Self.shells.contains(parent.name), !isTool(parent.pid), ProcScanner.cwd(pid: parent.pid) == cwd {
             current = parent.pid
         }
         return current
     }
+
+    /// Apps, editors and coding agents: never a dev server, and never stopped as part of one. Claude Code,
+    /// for one, runs in the project's folder and listens on a port of its own.
+    public func isTool(_ pid: Int32) -> Bool {
+        let path = paths[pid] ?? ProcScanner.path(pid: pid)
+        return path.contains(".app/Contents/")
+            || Self.editorExtensions.contains { path.contains($0) }
+            || Self.agents.contains(procs[pid]?.name ?? "")
+    }
+
+    private static let editorExtensions = ["/.vscode/extensions/", "/.vscode-insiders/extensions/", "/.cursor/extensions/", "/.windsurf/extensions/"]
+    private static let agents: Set<String> = ["claude"]
+
+    /// Where the system hands out ports to whoever asks for any (macOS: 49152 and up). Dev servers
+    /// don't pick these; editors, agents and debuggers do.
+    public static func isEphemeral(_ port: Int) -> Bool { port >= 49152 }
 }
