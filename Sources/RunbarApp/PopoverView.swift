@@ -119,12 +119,28 @@ struct PopoverView: View {
     }
 
     private func header(_ t: Theme) -> some View {
-        HStack(alignment: .center, spacing: 10) {
+        let running = model.runningCount
+        return HStack(alignment: .center, spacing: 10) {
             AppMark()
             Text("Runbar")
                 .font(.system(size: 15, weight: .semibold))
             Spacer(minLength: 8)
             HStack(spacing: 2) {
+                if running > 0 {
+                    Button { model.stopAllServices() } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 8, weight: .bold))
+                            Text("Stop all")
+                        }
+                    }
+                    .rbButton(t)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .padding(.trailing, 6)
+                    .help(running == 1 ? "Stop the running service" : "Stop the \(running) running services")
+                    .accessibilityLabel("Stop all running services")
+                }
                 Button { model.refresh() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(IconButtonStyle())
                     .help("Reload config.json and refresh")
