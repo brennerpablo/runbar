@@ -7,7 +7,7 @@ enum AgentPrompt {
         """
         Set up Runbar for my projects in \(root).
 
-        Read ~/.config/runbar/README.md and edit ~/.config/runbar/config.json following ~/.config/runbar/schema.json. For each app that runs a development server (Next.js, Python APIs, docker compose…), add a service with its folder, its command and a port that doesn't clash with the others. Keep what's already in the file and run `runbar validate` at the end.
+        Read ~/.config/runbar/README.md and edit ~/.config/runbar/config.json following ~/.config/runbar/schema.json. For each app that runs a development server (Next.js, Python APIs, docker compose…), add a service with its folder, its command and a port that doesn't clash with the others. If an app reaches its database through a proxy (cloud-sql-proxy, kubectl port-forward, ssh -L), add the proxy as a "proxy" service and list it in that app's "needs". Keep what's already in the file and run `runbar validate` at the end.
         """
     }
 

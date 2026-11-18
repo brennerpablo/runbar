@@ -70,17 +70,16 @@ struct DisclosureChevron: View {
     }
 }
 
-/// Runbar mark: the two stacked servers from the menu bar icon.
+/// Runbar mark: the `>_` prompt from the menu bar icon.
 struct RunbarGlyph: View {
     var size: CGFloat = 16
 
     var body: some View {
         Canvas { context, canvas in
             let s = canvas.width / 16
-            for y in [2.2, 9.0] as [CGFloat] {
-                let rect = CGRect(x: 1.5 * s, y: y * s, width: 13 * s, height: 4.8 * s)
-                context.stroke(Path(roundedRect: rect, cornerRadius: 1.6 * s), with: .foreground, lineWidth: 1.4 * s)
-                context.fill(Path(ellipseIn: CGRect(x: 3.6 * s, y: (y + 1.5) * s, width: 1.8 * s, height: 1.8 * s)), with: .foreground)
+            for cell in RunbarMark.cells {
+                let rect = CGRect(x: cell.minX * s, y: cell.minY * s, width: cell.width * s, height: cell.height * s)
+                context.fill(Path(rect), with: .foreground)
             }
         }
         .frame(width: size, height: size)

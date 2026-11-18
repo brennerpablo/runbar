@@ -14,19 +14,29 @@ struct PopoverView: View {
     var initialSelection: String?
     var initialTab: PanelTab?
     var initialQuery: String?
+    /// Screenshots: the "ports in use outside Runbar" card open, or a port being moved into Runbar.
+    var initialShowOthers = false
+    var initialImport: Listener?
     @ViewState private var tab: PanelTab = .services
     @ViewState private var query = ""
     @ViewState private var filter: StatusFilter = .all
     @ViewState private var expanded: Set<String> = []
     @ViewState private var expandedReady = false
     @ViewState private var showOthers = false
+    /// The port held outside Runbar being moved into it (its listener).
+    @ViewState private var importing: Listener?
     @FocusState private var searchFocused: Bool
 
     var body: some View {
         let theme = model.theme
         VStack(spacing: 0) {
             if let id = selected, let rt = model.runtimes[id] {
-                ServiceDetailView(runtime: rt) { selected = nil }
+                ServiceDetailView(runtime: rt, open: { selected = $0 }) { selected = nil }
+            } else if let listener = importing, let job = model.launchdJobs[listener.pid] {
+                LaunchdImportView(listener: listener, job: job) { opened in
+                    importing = nil
+                    if let opened { selected = opened }
+                }
             } else {
                 list(theme)
             }
@@ -39,6 +49,8 @@ struct PopoverView: View {
             if selected == nil, let initialSelection { selected = initialSelection }
             if let initialTab { tab = initialTab }
             if let initialQuery { query = initialQuery }
+            if initialShowOthers { showOthers = true }
+            if let initialImport { importing = initialImport }
         }
     }
 
@@ -120,13 +132,14 @@ struct PopoverView: View {
 
     private func header(_ t: Theme) -> some View {
         let running = model.runningCount
+        let proxies = model.openProxyCount
         return HStack(alignment: .center, spacing: 10) {
             AppMark()
             Text("Runbar")
                 .font(.system(size: 15, weight: .semibold))
             Spacer(minLength: 8)
             HStack(spacing: 2) {
-                if running > 0 {
+                if running + proxies > 0 {
                     Button { model.stopAllServices() } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "stop.fill")
@@ -138,7 +151,7 @@ struct PopoverView: View {
                     .controlSize(.small)
                     .fixedSize()
                     .padding(.trailing, 6)
-                    .help(running == 1 ? "Stop the running service" : "Stop the \(running) running services")
+                    .help(stopAllHelp(running: running, proxies: proxies))
                     .accessibilityLabel("Stop all running services")
                 }
                 Button { model.refresh() } label: { Image(systemName: "arrow.clockwise") }
@@ -161,6 +174,13 @@ struct PopoverView: View {
             }
         }
         .frame(height: Layout.control)
+    }
+
+    private func stopAllHelp(running: Int, proxies: Int) -> String {
+        var parts: [String] = []
+        if running > 0 { parts.append(running == 1 ? "the running service" : "the \(running) running services") }
+        if proxies > 0 { parts.append(proxies == 1 ? "close the open proxy" : "close the \(proxies) open proxies") }
+        return "Stop " + parts.joined(separator: " and ")
     }
 
     /// Everything that used to live in the footer: config, look, folders and quit.
@@ -197,13 +217,16 @@ struct PopoverView: View {
     /// Running and Disk are also the tabs: the raised one is the view below.
     private func tiles(_ t: Theme) -> some View {
         let running = model.runningCount
+        let proxies = model.openProxyCount
         let memory = Format.memory(model.totalMemory).split(separator: " ").map(String.init)
         let disk = DiskModel.shared
         let diskSize = Format.memory(disk.total).split(separator: " ").map(String.init)
         return HStack(spacing: 8) {
             Button { show(.services) } label: {
-                StatTile(label: "Running", value: "\(running)", raised: tab == .services, live: running > 0) {
-                    Text("of \(model.config.services.count)")
+                // Open proxies show as a green "+1 proxy" in place of the live dot (there's no room for both).
+                StatTile(label: "Running", value: "\(running)", raised: tab == .services, live: running > 0 && proxies == 0,
+                         note: proxies > 0 ? "+\(proxies) \(proxies == 1 ? "proxy" : "proxies")" : nil, noteColor: .rbLive) {
+                    Text("of \(model.serviceCount)")
                         .font(.system(size: 11.5))
                         .monospacedDigit()
                         .foregroundStyle(Color.rbText2)
@@ -311,13 +334,16 @@ struct PopoverView: View {
     }
 
     private func listHeader(_ t: Theme) -> some View {
-        HStack(alignment: .center, spacing: 6) {
+        let services = model.groups.reduce(0) { $0 + $1.services.count }
+        let proxies = model.groups.reduce(0) { $0 + $1.proxies.count }
+        return HStack(alignment: .center, spacing: 6) {
             Text("Services")
                 .font(.system(size: 12.5, weight: .semibold))
-            Text("\(model.groups.reduce(0) { $0 + $1.runtimes.count })")
+            Text(proxies == 0 ? "\(services)" : "\(services) · \(proxies) \(proxies == 1 ? "proxy" : "proxies")")
                 .font(.system(size: 12.5))
                 .monospacedDigit()
                 .foregroundStyle(Color.rbText3)
+                .lineLimit(1)
             Spacer(minLength: 8)
             SegmentedFilter(selection: $filter).fixedSize()
         }
@@ -368,7 +394,7 @@ struct PopoverView: View {
         }
     }
 
-    private var searchPrompt: String { tab == .services ? "Search services or ports" : "Filter projects or folders" }
+    private var searchPrompt: String { tab == .services ? "Search services, proxies or ports" : "Filter projects or folders" }
 
     private var isFiltering: Bool { filter != .all || !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -381,7 +407,8 @@ struct PopoverView: View {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return true }
         let ports = ([rt.config.port].compactMap { $0 } + rt.listening + (rt.external?.ports ?? [])).map(String.init).joined(separator: " ")
-        let hay = "\(rt.id) \(rt.config.command) \(rt.config.type.label) \(rt.config.projectName) \(ports)".lowercased()
+        let tool = rt.config.isProxy ? rt.config.proxyTool.label : ""
+        let hay = "\(rt.id) \(rt.config.command) \(rt.config.type.label) \(tool) \(rt.config.projectName) \(ports)".lowercased()
         return hay.contains(q)
     }
 
@@ -461,18 +488,22 @@ struct PopoverView: View {
             if showOthers {
                 VStack(spacing: 0) {
                     ForEach(model.otherListeners) { l in
-                        HStack(spacing: 10) {
-                            Pill(text: ":\(l.port)")
-                            Text(l.name).font(.system(size: 12)).lineLimit(1)
-                            Spacer(minLength: 4)
-                            Text("PID \(l.pid)")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(Color.rbText2)
-                            Button("Kill") { model.killOther(pid: l.pid) }
-                                .rbButton(t)
-                                .controlSize(.small)
+                        if let job = model.launchdJobs[l.pid] {
+                            launchdRow(l, job, t)
+                        } else {
+                            HStack(spacing: 10) {
+                                Pill(text: ":\(l.port)")
+                                Text(l.name).font(.system(size: 12)).lineLimit(1)
+                                Spacer(minLength: 4)
+                                Text(verbatim: "PID \(l.pid)")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(Color.rbText2)
+                                Button("Kill") { model.killOther(pid: l.pid) }
+                                    .rbButton(t)
+                                    .controlSize(.small)
+                            }
+                            .frame(height: 34)
                         }
-                        .frame(height: 34)
                     }
                 }
                 .padding(.leading, Layout.rowInset)
@@ -481,6 +512,49 @@ struct PopoverView: View {
             }
         }
         .rbCard(t)
+    }
+
+    /// A port held by a launchd job: Kill would only make launchd start it again, so the row says so and
+    /// offers what does work.
+    private func launchdRow(_ l: Listener, _ job: LaunchdJob, _ t: Theme) -> some View {
+        HStack(spacing: 10) {
+            Pill(text: ":\(l.port)")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(l.name).font(.system(size: 12)).lineLimit(1)
+                HStack(spacing: 4) {
+                    Image(systemName: job.keepAlive ? "arrow.clockwise" : "gearshape")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(job.keepAlive ? "kept alive by launchd · \(job.label)" : "launchd job · \(job.label)")
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(job.keepAlive ? Color.rbWarn : Color.rbText2)
+            }
+            .help("\(job.label)\(job.plistPath.map { "\n\(Paths.abbreviate($0))" } ?? "")")
+            Spacer(minLength: 4)
+            Menu {
+                Button("Move into Runbar…") { importing = l }
+                Button("Turn off (won't start at login)") { model.turnOff(job) }
+                if let plist = job.plistPath {
+                    Button("Show plist in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: plist)]) }
+                }
+                Divider()
+                Button(job.keepAlive ? "Kill once (launchd starts it again)" : "Kill") { model.killOther(pid: l.pid) }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("Manage")
+                    Image(systemName: "chevron.down").font(.system(size: 7.5, weight: .bold))
+                }
+            }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .rbButton(t)
+            .controlSize(.small)
+            .fixedSize()
+            .accessibilityLabel("Manage \(l.name) on port \(l.port)")
+        }
+        .frame(minHeight: 44)
     }
 
     // MARK: - Helpers
@@ -516,8 +590,12 @@ private struct GroupSection: View {
     let open: (String) -> Void
 
     var body: some View {
-        let alive = group.runtimes.filter(\.isRunningAnywhere).count
-        let allOn = alive == group.runtimes.count && alive > 0
+        // Proxies open and close on their own: the header's dots, count and Start all are about services.
+        let counted = group.services.isEmpty ? group.runtimes : group.services
+        let alive = counted.filter(\.isRunningAnywhere).count
+        let allOn = alive == counted.count && alive > 0
+        let serviceRows = rows.filter { !$0.config.isProxy }
+        let proxyRows = rows.filter { $0.config.isProxy }
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Button(action: toggle) {
@@ -526,7 +604,7 @@ private struct GroupSection: View {
                         Text(group.name)
                             .font(.system(size: 12.5, weight: .semibold))
                             .lineLimit(1)
-                        Pips(dots: group.runtimes.map { model.display($0).dot })
+                        Pips(dots: counted.map { model.display($0).dot })
                             .padding(.leading, 2)
                         Spacer(minLength: 0)
                     }
@@ -535,7 +613,7 @@ private struct GroupSection: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(group.name), \(alive) of \(group.runtimes.count) running")
+                .accessibilityLabel("\(group.name), \(alive) of \(counted.count) running")
                 .accessibilityHint(isExpanded ? "Collapse" : "Expand")
 
                 if !group.isOrphanGroup {
@@ -549,19 +627,42 @@ private struct GroupSection: View {
             .padding(.trailing, 5)
             .frame(height: 38)
 
-            if isExpanded && !rows.isEmpty {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, rt in
-                    if index > 0 {
-                        Rectangle()
-                            .fill(Color.rbHairline)
-                            .frame(height: 1)
-                            .padding(.leading, Layout.rowInset + Layout.dot + Layout.dotGap)
-                    }
-                    ServiceRow(runtime: rt) { open(rt.id) }
+            if isExpanded && !serviceRows.isEmpty {
+                rowList(serviceRows)
+            }
+            if isExpanded && !proxyRows.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 9.5, weight: .semibold))
+                    Text("Proxies")
+                        .font(.system(size: 11, weight: .medium))
                 }
+                .foregroundStyle(Color.rbText3)
+                .padding(.horizontal, Layout.rowInset)
+                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                .overlay(alignment: .top) {
+                    if !serviceRows.isEmpty {
+                        Rectangle().fill(Color.rbHairline).frame(height: 1).padding(.horizontal, Layout.rowInset)
+                    }
+                }
+                .accessibilityAddTraits(.isHeader)
+                rowList(proxyRows)
             }
         }
         .rbCard(theme)
+    }
+
+    @ViewBuilder
+    private func rowList(_ list: [ServiceRuntime]) -> some View {
+        ForEach(Array(list.enumerated()), id: \.element.id) { index, rt in
+            if index > 0 {
+                Rectangle()
+                    .fill(Color.rbHairline)
+                    .frame(height: 1)
+                    .padding(.leading, Layout.rowInset + Layout.dot + Layout.dotGap)
+            }
+            ServiceRow(runtime: rt) { open(rt.id) }
+        }
     }
 }
 
@@ -601,7 +702,23 @@ private struct ServiceRow: View {
             .accessibilityLabel("\(runtime.id), \(d.statusLabel)")
             .accessibilityHint("Open details")
 
-            if let memory = d.memory {
+            if d.isProxy, let connections = d.connections {
+                // A proxy's number is who uses it; its memory is small and steady.
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(connections) conn")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(connections > 0 ? Color.primary : Color.rbText2)
+                    if let memory = d.memory {
+                        Text(Format.memory(memory))
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(Color.rbText2)
+                    }
+                }
+                .lineLimit(1)
+                .frame(width: Layout.metricsWidth, alignment: .trailing)
+                .help(connections == 1 ? "1 connection open through this proxy" : "\(connections) connections open through this proxy")
+                .accessibilityElement(children: .combine)
+            } else if let memory = d.memory {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(Format.memory(memory))
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -616,7 +733,10 @@ private struct ServiceRow: View {
             }
 
             if let label = d.portLabel {
-                if let url = d.url, runtime.phase == .running || d.isExternal {
+                if d.isProxy {
+                    Pill(text: label, tone: d.warn ? .warn : (runtime.isRunningAnywhere && runtime.phase != .stopping ? .live : .idle))
+                        .help(d.url.map { "\($0.absoluteString) · right-click to copy" } ?? "Local port")
+                } else if let url = d.url, runtime.phase == .running || d.isExternal {
                     Button { NSWorkspace.shared.open(url) } label: { Pill(text: label, tone: d.warn ? .warn : .live) }
                         .buttonStyle(.plain)
                         .help("Open \(url.absoluteString)")
@@ -641,6 +761,9 @@ private struct ServiceRow: View {
                     .help(DismissText.help(runtime))
                 Divider()
             }
+            if d.isProxy, let url = runtime.config.url(port: runtime.expectedPort) {
+                Button("Copy \(url.scheme ?? "connection") URL") { Pasteboard.copy(url.absoluteString) }
+            }
             Button("Open full log") { NSWorkspace.shared.open(runtime.logURL) }
         }
     }
@@ -654,10 +777,11 @@ private struct ServiceRow: View {
     }
 
     private func actionHelp(_ d: ServiceDisplay) -> String {
+        if runtime.phase == .waiting { return "Don't start \(runtime.id)" }
         switch d.action {
-        case .start: return "Start \(runtime.id)"
-        case .stop: return "Stop \(runtime.id)"
-        case .retry: return "Try starting \(runtime.id) again"
+        case .start: return d.isProxy ? "Open \(runtime.id)" : "Start \(runtime.id)"
+        case .stop: return d.isProxy ? "Close \(runtime.id)" : "Stop \(runtime.id)"
+        case .retry: return d.isProxy ? "Try opening \(runtime.id) again" : "Try starting \(runtime.id) again"
         }
     }
 }

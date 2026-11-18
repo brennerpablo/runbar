@@ -18,6 +18,26 @@ struct ServiceGroup: Identifiable {
     let name: String
     let runtimes: [ServiceRuntime]
     var isOrphanGroup: Bool { id == AppModel.orphanGroupID }
+    /// The project's services; its proxies are listed apart, after them.
+    @MainActor var services: [ServiceRuntime] { runtimes.filter { !$0.config.isProxy } }
+    @MainActor var proxies: [ServiceRuntime] { runtimes.filter { $0.config.isProxy } }
+}
+
+/// Where a service's `needs` stand before it starts.
+enum NeedsState: Equatable {
+    case ready
+    case pending([String])
+    case failed(String)
+}
+
+/// What the user picked when moving a launchd job into Runbar.
+struct LaunchdImport {
+    var name: String
+    var projectID: String
+    /// "15m", "1h", "never": proxies only.
+    var idle: String
+    /// Services that will open it before they start.
+    var openWith: [String]
 }
 
 private struct PersistedState: Codable {
@@ -51,6 +71,8 @@ final class AppModel {
     private(set) var launchAtLogin = false
     /// Alerts the user dismissed while their situation still holds, by service: the alert's key.
     private(set) var mutedAlerts: [String: String] = [:]
+    /// launchd jobs behind ports held outside Runbar, by the PID that listens.
+    private(set) var launchdJobs: [Int32: LaunchdJob] = [:]
 
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var control: ControlServer?
@@ -64,6 +86,8 @@ final class AppModel {
     @ObservationIgnored private var started = false
     @ObservationIgnored var stopServicesOnQuit = true
     @ObservationIgnored private let scanQueue = DispatchQueue(label: "runbar.scan", qos: .utility)
+    /// The listening PIDs the last launchd lookup covered: it runs again only when they change.
+    @ObservationIgnored private var launchdScannedFor: Set<Int32> = []
 
     /// Used by --snapshot mode to draw both looks.
     var lookOverride: LookSetting?
@@ -223,7 +247,7 @@ final class AppModel {
 
     func toggle(_ id: String) {
         guard let rt = runtimes[id] else { return }
-        if rt.isAlive {
+        if rt.isAlive || rt.phase == .waiting {
             rt.stop()
         } else if rt.external != nil {
             rt.stopExternal()
@@ -232,8 +256,49 @@ final class AppModel {
         }
     }
 
+    /// Starts the project's services. Its proxies open through `needs`, so they only open here when the
+    /// project is nothing but proxies.
     func startAll(_ group: ServiceGroup) {
-        group.runtimes.filter { !$0.isRunningAnywhere }.forEach { $0.start() }
+        let services = group.services.isEmpty ? group.runtimes : group.services
+        services.filter { !$0.isRunningAnywhere }.forEach { $0.start() }
+    }
+
+    // MARK: - Needs
+
+    /// Opens whatever `cfg` needs that isn't open, then says where they stand. `retryFailed` starts again
+    /// the ones that failed or crashed (on the first try; not while waiting).
+    func openNeeds(of cfg: ServiceConfig, retryFailed: Bool = true) -> NeedsState {
+        for id in cfg.needs {
+            guard let rt = runtimes[id], !rt.isRunningAnywhere else { continue }
+            switch rt.phase {
+            case .stopped: rt.start()
+            case .crashed, .failed: if retryFailed { rt.start() }
+            default: break
+            }
+        }
+        return needsState(of: cfg)
+    }
+
+    func needsState(of cfg: ServiceConfig) -> NeedsState {
+        var pending: [String] = []
+        for id in cfg.needs {
+            guard let rt = runtimes[id] else { return .failed("\(id) isn't in config.json") }
+            if isReady(rt) { continue }
+            switch rt.phase {
+            case .failed(let message): return .failed("\(id) didn't open: \(message)")
+            case .crashed(let code): return .failed("\(id) didn't open (exit code \(code.map(String.init) ?? "unknown"))")
+            default: pending.append(id)
+            }
+        }
+        return pending.isEmpty ? .ready : .pending(pending)
+    }
+
+    /// Open and answering: its port takes connections (or, without a port, it's running).
+    private func isReady(_ rt: ServiceRuntime) -> Bool {
+        if let ext = rt.external { return rt.config.port.map { ext.ports.contains($0) } ?? true }
+        guard rt.isAlive, rt.phase == .starting || rt.phase == .running else { return false }
+        guard let port = rt.expectedPort else { return rt.phase == .running }
+        return rt.listening.contains(port) || PortProbe.isInUse(port)
     }
 
     func stopAll(_ group: ServiceGroup) {
@@ -246,18 +311,27 @@ final class AppModel {
     }
 
     private func stopIfRunning(_ rt: ServiceRuntime) {
-        if rt.isAlive { rt.stop() } else if rt.external != nil { rt.stopExternal() }
+        if rt.isAlive || rt.phase == .waiting { rt.stop() } else if rt.external != nil { rt.stopExternal() }
     }
 
-    /// Stops whoever holds the port and (re)starts the service.
+    /// Stops whoever holds the port and (re)starts the service. Signing in and opening what a service
+    /// needs only do that.
     func perform(_ fix: FixAction, for rt: ServiceRuntime) {
         switch fix {
+        case .signIn:
+            signIn(for: rt)
+            return
+        case .openNeeds:
+            _ = openNeeds(of: rt.config)
+            return
         case .stopService(let blockerID):
             if let blocker = runtimes[blockerID] {
                 if blocker.isAlive { blocker.stop() } else { blocker.stopExternal() }
             }
         case .killProcess(let pid):
             kill(pid, SIGTERM)
+        case .turnOffLaunchd(let label, _):
+            DispatchQueue.global(qos: .userInitiated).async { try? Launchd.turnOff(label) }
         case .takeOverExternal:
             rt.stopExternal()
         }
@@ -268,8 +342,9 @@ final class AppModel {
                 let blocked: Bool
                 switch fix {
                 case .stopService(let b): blocked = self.runtimes[b]?.isRunningAnywhere == true
-                case .killProcess(let p): blocked = kill(p, 0) == 0
+                case .killProcess(let p), .turnOffLaunchd(_, let p): blocked = kill(p, 0) == 0
                 case .takeOverExternal: blocked = self.runtimes[target]?.external.map { kill($0.rootPID, 0) == 0 } ?? false
+                case .signIn, .openNeeds: blocked = false
                 }
                 if !blocked { break }
             }
@@ -302,6 +377,106 @@ final class AppModel {
         Darwin.kill(pid, SIGTERM)
     }
 
+    // MARK: - launchd
+
+    /// Stops a launchd job and keeps it from starting again, at login included.
+    func turnOff(_ job: LaunchdJob) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? Launchd.turnOff(job.label)
+            DispatchQueue.main.async { MainActor.assumeIsolated { self.tick() } }
+        }
+    }
+
+    /// Takes a launchd job over: adds it to config.json (a proxy that opens on demand, when it is one),
+    /// has the chosen services open it, then unloads the job and moves its plist next to config.json.
+    func importLaunchd(_ job: LaunchdJob, port: Int, _ choice: LaunchdImport, done: @escaping (String?) -> Void) {
+        guard RunbarConfig.isValidID(choice.name) else { return done("Use letters, digits, . _ or - in the name.") }
+        guard config.service(choice.name) == nil else { return done("There's already a service called \(choice.name).") }
+        guard config.projects.contains(where: { $0.id == choice.projectID }) else { return done("Pick a project.") }
+        let command = job.command(port: port)
+        let isProxy = ProxyTool.detect(command) != .other
+        var entry = JSONObject()
+        if isProxy { entry["type"] = .string(ServiceType.proxy.rawValue) }
+        entry["command"] = .string(command)
+        if let wd = job.workingDirectory { entry["cwd"] = .string(Paths.abbreviate(wd)) }
+        entry["port"] = .number(Double(port))
+        if isProxy { entry["idle"] = .string(choice.idle) }
+        if !job.environment.isEmpty {
+            var env = JSONObject()
+            for key in job.environment.keys.sorted() { env[key] = .string(job.environment[key] ?? "") }
+            entry["env"] = .object(env)
+        }
+        do {
+            try ConfigEditor.set(.object(entry), at: ["projects", choice.projectID, "services", choice.name])
+            for sid in choice.openWith {
+                guard let svc = config.service(sid), !svc.needs.contains(choice.name) else { continue }
+                let needs = (svc.needs + [choice.name]).map { JSON.string($0) }
+                try ConfigEditor.set(.array(needs), at: ["projects", svc.projectID, "services", sid, "needs"])
+            }
+        } catch {
+            return done("Couldn't write config.json: \(error.localizedDescription)")
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            var failure: String?
+            do { try Launchd.retire(job) } catch { failure = "\(choice.name) is in config.json, but \(error)" }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.reloadConfig(force: true)
+                    self.tick()
+                    done(failure)
+                }
+            }
+        }
+    }
+
+    /// Runs the tool's sign-in command in Terminal. When its credentials file changes, the proxy tries again.
+    func signIn(for rt: ServiceRuntime) {
+        guard let command = rt.config.proxyTool.signInCommand else { return }
+        let url = Paths.supportDir.appendingPathComponent("sign-in.command")
+        let script = """
+        #!/bin/zsh -l
+        echo "Runbar: signing in for \(rt.id)"
+        \(command)
+        echo
+        echo "Runbar reopens \(rt.id) on its own. You can close this window."
+
+        """
+        do {
+            try FileManager.default.createDirectory(at: Paths.supportDir, withIntermediateDirectories: true)
+            try script.write(to: url, atomically: true, encoding: .utf8)
+            chmod(url.path, 0o755)
+            NSWorkspace.shared.open(url)
+        } catch {
+            NSLog("Runbar: sign-in script: \(error)")
+        }
+    }
+
+    private func checkSignIns() {
+        for rt in runtimes.values {
+            guard let seen = rt.signInExpiredAt, let path = rt.config.proxyTool.credentialsPath,
+                  let changed = LogTailer.modificationDate(URL(fileURLWithPath: path)), changed > seen else { continue }
+            rt.signedInAgain()
+        }
+    }
+
+    // MARK: - Proxy settings written from the UI
+
+    /// Sets a proxy's `idle` ("5m", "15m", "1h", "never") in config.json.
+    func setIdle(_ text: String, for id: String) {
+        guard let svc = config.service(id) else { return }
+        try? ConfigEditor.set(.string(text), at: ["projects", svc.projectID, "services", id, "idle"])
+        reloadConfig(force: true)
+    }
+
+    /// Adds or removes `proxy` from a service's `needs` in config.json.
+    func setNeeds(_ serviceID: String, opens proxy: String, _ on: Bool) {
+        guard let svc = config.service(serviceID) else { return }
+        var needs = svc.needs.filter { $0 != proxy }
+        if on { needs.append(proxy) }
+        try? ConfigEditor.set(.array(needs.map { JSON.string($0) }), at: ["projects", svc.projectID, "services", serviceID, "needs"])
+        reloadConfig(force: true)
+    }
+
     func refresh() {
         reloadConfig(force: true)
         tick()
@@ -315,7 +490,10 @@ final class AppModel {
         pruneMutedAlerts()
         if LogTailer.modificationDate(Paths.configFile) != lastConfigStamp { reloadConfig() }
         runtimes.values.forEach { $0.pollLog() }
-        if tickCount % 3 == 0 { runHealthChecks() }
+        if tickCount % 3 == 0 {
+            runHealthChecks()
+            checkSignIns()
+        }
         guard !scanning else { return }
         scanning = true
         scanQueue.async {
@@ -385,6 +563,80 @@ final class AppModel {
         if owners != portOwners { portOwners = owners }
         let sortedOthers = others.values.sorted { $0.port < $1.port }
         if sortedOthers != otherListeners { otherListeners = sortedOthers }
+
+        applyProxyUsage(snap, managed: managed)
+        // The ports listed outside Runbar, plus whatever holds a port from config.json (even an app's helper).
+        let blockers = config.services.compactMap(\.port).compactMap { owners[$0] }.filter { $0.serviceID == nil }.map(\.pid)
+        lookUpLaunchd(for: Set(sortedOthers.map(\.pid) + blockers), snap: snap)
+    }
+
+    /// Who is connected to each proxy and which services hold it open; closes the ones nothing used for
+    /// their whole `idle` time.
+    private func applyProxyUsage(_ snap: ProcSnapshot, managed: [Int32: String]) {
+        for rt in runtimes.values where rt.config.isProxy {
+            let own: Set<Int32> = rt.isAlive ? rt.treePIDs : (rt.external?.pids ?? [])
+            var ports = Set(rt.isAlive ? rt.listening : (rt.external?.ports ?? []))
+            if rt.isRunningAnywhere, let p = rt.expectedPort { ports.insert(p) }
+            var byClient: [String: ProxyClient] = [:]
+            if !ports.isEmpty {
+                for (pid, n) in snap.clients(of: ports, excluding: own) {
+                    let sid = managed[pid]
+                    let key = sid ?? "pid-\(pid)"
+                    if byClient[key] != nil {
+                        byClient[key]?.connections += n
+                    } else {
+                        byClient[key] = ProxyClient(id: key, name: sid ?? Self.clientName(pid, snap), serviceID: sid, pid: pid, connections: n)
+                    }
+                }
+            }
+            let clients = byClient.values.sorted { ($0.serviceID == nil ? 1 : 0, $0.name) < ($1.serviceID == nil ? 1 : 0, $1.name) }
+            let holders = config.dependents(of: rt.id).compactMap { runtimes[$0.id] }
+                .filter { $0.isRunningAnywhere || $0.phase == .waiting }.map(\.id)
+            rt.applyUsage(clients: clients, heldBy: holders, at: snap.time)
+            if !snapshotMode, let closes = rt.closesAt, snap.time >= closes { rt.closeForIdle() }
+        }
+    }
+
+    /// psql, TablePlus, Python: the app's name for an app, the binary's for the rest.
+    private static func clientName(_ pid: Int32, _ snap: ProcSnapshot) -> String {
+        let path = snap.paths[pid] ?? ProcScanner.path(pid: pid)
+        if let r = path.range(of: ".app/Contents/") { return (String(path[..<r.lowerBound]) as NSString).lastPathComponent }
+        if !path.isEmpty { return (path as NSString).lastPathComponent }
+        return snap.procs[pid]?.name ?? "PID \(pid)"
+    }
+
+    /// Finds which ports held outside Runbar come from a launchd job (what makes Kill "not work"). Runs
+    /// `launchctl list` only when those processes change.
+    private func lookUpLaunchd(for pids: Set<Int32>, snap: ProcSnapshot) {
+        guard pids != launchdScannedFor else { return }
+        launchdScannedFor = pids
+        let chains = Dictionary(uniqueKeysWithValues: pids.map { ($0, Array(snap.ancestry(of: $0).prefix(3))) })
+        let lookUp = { () -> [Int32: LaunchdJob] in
+            let running = Launchd.runningJobs()
+            var byLabel: [String: LaunchdJob] = [:]
+            var out: [Int32: LaunchdJob] = [:]
+            for (pid, chain) in chains {
+                // Apps (Terminal, VS Code) are launchd jobs too: what runs inside them isn't kept alive by launchd.
+                guard let jobPID = chain.first(where: { running[$0] != nil }), let label = running[jobPID],
+                      !label.hasPrefix("application."), !label.hasPrefix("com.apple.") else { continue }
+                let job = byLabel[label] ?? Launchd.job(label: label, pid: jobPID)
+                byLabel[label] = job
+                out[pid] = job
+            }
+            return out
+        }
+        if snapshotMode {
+            launchdJobs = lookUp()
+            return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            let jobs = lookUp()
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    if jobs != self.launchdJobs { self.launchdJobs = jobs }
+                }
+            }
+        }
     }
 
     private func runHealthChecks() {
@@ -495,23 +747,32 @@ final class AppModel {
             guard let id = request.id, let rt = runtimes[id] else {
                 return ControlResponse(ok: false, error: "no service \"\(request.id ?? "")\" in config.json")
             }
+            let proxy = rt.config.isProxy
             switch request.cmd {
             case "start":
-                if rt.isAlive { return ControlResponse(ok: true, message: "\(id) is already running") }
+                if rt.isAlive { return ControlResponse(ok: true, message: "\(id) is already \(proxy ? "open" : "running")") }
+                if rt.phase == .waiting { return ControlResponse(ok: true, message: "\(id) is waiting for \(rt.waitingFor.joined(separator: ", "))") }
                 rt.start()
                 if case .failed(let msg) = rt.phase { return ControlResponse(ok: false, error: msg) }
-                return ControlResponse(ok: true, message: "starting \(id)")
+                if rt.phase == .waiting {
+                    return ControlResponse(ok: true, message: "opening \(rt.waitingFor.joined(separator: ", ")) first, then starting \(id)")
+                }
+                return ControlResponse(ok: true, message: "\(proxy ? "opening" : "starting") \(id)")
             case "stop":
+                if rt.phase == .waiting {
+                    rt.stop()
+                    return ControlResponse(ok: true, message: "\(id) won't start")
+                }
                 if !rt.isAlive {
                     if rt.external != nil {
                         rt.stopExternal()
                         return ControlResponse(ok: true, message: "stopping \(id) (started outside Runbar)")
                     }
                     rt.stop()
-                    return ControlResponse(ok: true, message: "\(id) is already stopped")
+                    return ControlResponse(ok: true, message: "\(id) is already \(proxy ? "closed" : "stopped")")
                 }
                 rt.stop()
-                return ControlResponse(ok: true, message: "stopping \(id)")
+                return ControlResponse(ok: true, message: "\(proxy ? "closing" : "stopping") \(id)")
             default:
                 rt.restart()
                 return ControlResponse(ok: true, message: "restarting \(id)")
@@ -531,9 +792,11 @@ final class AppModel {
             case .starting: status = "starting"
             case .running: status = "running"
             case .stopping: status = "stopping"
+            case .waiting: status = "waiting"
             case .crashed: status = "crashed"
             case .failed: status = "failed"
             }
+            let proxy = rt.config.isProxy
             return ServiceStatus(
                 id: rt.id, project: rt.config.projectID, type: rt.config.type.rawValue, status: status,
                 port: rt.config.port, realPort: d.realPort, listening: rt.external?.ports ?? rt.listening,
@@ -543,15 +806,23 @@ final class AppModel {
                 startedAt: rt.isAlive ? rt.startedAt : rt.external?.startedAt, lastLogAt: rt.lastLogAt, exitCode: rt.lastExitCode,
                 url: d.url?.absoluteString, command: rt.config.command(port: rt.expectedPort),
                 cwd: rt.config.cwd, logFile: rt.logURL.path, alert: d.alert ? d.subtitle : nil,
-                activePort: rt.activePort
+                activePort: rt.activePort,
+                needs: rt.config.needs.isEmpty ? nil : rt.config.needs,
+                waitingFor: rt.phase == .waiting ? rt.waitingFor : nil,
+                connections: proxy && rt.isRunningAnywhere ? rt.connectionCount : nil,
+                clients: proxy && rt.isRunningAnywhere ? rt.clients.map(\.name) : nil,
+                closesAt: rt.closesAt
             )
         }
     }
 
     // MARK: - Summary for the UI
 
-    var runningCount: Int { runtimes.values.filter(\.isRunningAnywhere).count }
-    var isBusy: Bool { runtimes.values.contains { $0.phase == .starting || $0.phase == .stopping } }
+    /// Services running, proxies left out (they have their own count).
+    var runningCount: Int { runtimes.values.filter { !$0.config.isProxy && $0.isRunningAnywhere }.count }
+    var openProxyCount: Int { runtimes.values.filter { $0.config.isProxy && $0.isRunningAnywhere }.count }
+    var serviceCount: Int { config.services.filter { !$0.isProxy }.count }
+    var isBusy: Bool { runtimes.values.contains { $0.phase == .starting || $0.phase == .stopping || $0.phase == .waiting } }
     var alertCount: Int { runtimes.values.filter { display($0).alert }.count + (configError == nil ? 0 : 1) }
 
     /// Total memory of everything running, including services started outside Runbar.
@@ -672,7 +943,7 @@ final class AppModel {
 #if DEBUG
 extension AppModel {
     /// README screenshots: a made-up config and machine state, with nothing read from this Mac.
-    func loadDemo(config: RunbarConfig, now: Date, portOwners: [Int: PortOwner], otherListeners: [Listener]) {
+    func loadDemo(config: RunbarConfig, now: Date, portOwners: [Int: PortOwner], otherListeners: [Listener], launchdJobs: [Int32: LaunchdJob] = [:]) {
         snapshotMode = true
         self.config = config
         configError = nil
@@ -682,6 +953,7 @@ extension AppModel {
         self.now = now
         self.portOwners = portOwners
         self.otherListeners = otherListeners
+        self.launchdJobs = launchdJobs
     }
 }
 #endif

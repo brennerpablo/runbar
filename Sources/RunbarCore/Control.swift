@@ -35,10 +35,19 @@ public struct ServiceStatus: Codable, Sendable {
     public var alert: String?
     /// Port the service started on (differs from `port` when autoPort picked another).
     public var activePort: Int?
+    /// Services opened before this one starts.
+    public var needs: [String]?
+    /// While status is "waiting": the services it waits for.
+    public var waitingFor: [String]?
+    /// Proxies: open connections, who holds them, and when it closes if nothing connects.
+    public var connections: Int?
+    public var clients: [String]?
+    public var closesAt: Date?
 
     public init(id: String, project: String, type: String, status: String, port: Int?, realPort: Int?, listening: [Int],
                 pid: Int32?, memoryMB: Double?, cpuPercent: Double?, processes: Int?, startedAt: Date?, lastLogAt: Date?,
-                exitCode: Int32?, url: String?, command: String, cwd: String, logFile: String, alert: String?, activePort: Int? = nil) {
+                exitCode: Int32?, url: String?, command: String, cwd: String, logFile: String, alert: String?, activePort: Int? = nil,
+                needs: [String]? = nil, waitingFor: [String]? = nil, connections: Int? = nil, clients: [String]? = nil, closesAt: Date? = nil) {
         self.id = id
         self.project = project
         self.type = type
@@ -59,7 +68,14 @@ public struct ServiceStatus: Codable, Sendable {
         self.logFile = logFile
         self.alert = alert
         self.activePort = activePort
+        self.needs = needs
+        self.waitingFor = waitingFor
+        self.connections = connections
+        self.clients = clients
+        self.closesAt = closesAt
     }
+
+    public var isProxy: Bool { type == ServiceType.proxy.rawValue }
 }
 
 public struct ControlResponse: Codable, Sendable {

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ServiceType: String, Sendable, CaseIterable, Codable {
-    case nextjs, node, python, docker, java, other
+    case nextjs, node, python, docker, java, proxy, other
 
     public var label: String {
         switch self {
@@ -10,6 +10,7 @@ public enum ServiceType: String, Sendable, CaseIterable, Codable {
         case .python: return "Python"
         case .docker: return "Docker"
         case .java: return "Java"
+        case .proxy: return "Proxy"
         case .other: return "Other"
         }
     }
@@ -45,12 +46,17 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
     public var autoPort: Bool
     /// Command that reinstalls dependencies. Without it, Runbar picks one from the lockfile.
     public var install: String?
+    /// Services (usually proxies) opened before this one starts.
+    public var needs: [String]
+    /// Proxies only: seconds with no connections before Runbar closes it; nil never closes it.
+    public var idle: TimeInterval?
 
     public init(
         id: String, projectID: String, projectName: String, command: String, cwd: String,
         port: Int? = nil, type: ServiceType = .other, open: String? = nil, env: [String: String] = [:],
         envFile: String? = nil, health: String? = nil, autostart: Bool = false,
-        restart: RestartPolicy = .never, stop: String? = nil, autoPort: Bool = false, install: String? = nil
+        restart: RestartPolicy = .never, stop: String? = nil, autoPort: Bool = false, install: String? = nil,
+        needs: [String] = [], idle: TimeInterval? = nil
     ) {
         self.id = id
         self.projectID = projectID
@@ -68,7 +74,15 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
         self.stop = stop
         self.autoPort = autoPort
         self.install = install
+        self.needs = needs
+        self.idle = idle
     }
+
+    /// A local port forwarded to something remote (Cloud SQL, a cluster, a host over SSH): opened on
+    /// demand and closed when nothing uses it.
+    public var isProxy: Bool { type == .proxy }
+
+    public var proxyTool: ProxyTool { ProxyTool.detect(command) }
 
     /// Command with `{port}` replaced by the port the service will start on.
     public func command(port launchPort: Int?) -> String {
@@ -82,7 +96,7 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
         return [command, cwd, String(port ?? 0), envPart, envFile ?? ""].joined(separator: "\u{0}")
     }
 
-    /// URL for the "Open" button. `{port}` becomes the actual port.
+    /// URL for the "Open" button. `{port}` becomes the actual port. A proxy has none unless `open` says.
     public func url(port realPort: Int?) -> URL? {
         let p = realPort ?? port
         if let open {
@@ -90,7 +104,7 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
             if let p { s = s.replacingOccurrences(of: "{port}", with: String(p)) }
             return URL(string: s)
         }
-        guard let p else { return nil }
+        guard let p, !isProxy else { return nil }
         return URL(string: "http://localhost:\(p)")
     }
 }
@@ -120,6 +134,14 @@ public struct RunbarConfig: Sendable, Equatable {
 
     public func service(_ id: String) -> ServiceConfig? {
         services.first { $0.id == id }
+    }
+
+    /// Project and service ids: letters, digits, `.`, `_` and `-`.
+    public static func isValidID(_ s: String) -> Bool { ConfigValidator.validID(s) }
+
+    /// Services that open `id` before they start, in file order.
+    public func dependents(of id: String) -> [ServiceConfig] {
+        services.filter { $0.needs.contains(id) }
     }
 }
 
@@ -211,7 +233,10 @@ struct ConfigValidator {
     static let rootKeys = ["$schema", "version", "settings", "projects"]
     static let settingsKeys = ["look", "shell", "notifyOnCrash", "autoPort"]
     static let projectKeys = ["name", "root", "services"]
-    static let serviceKeys = ["command", "cwd", "port", "type", "open", "env", "envFile", "health", "autostart", "restart", "stop", "autoPort", "install"]
+    static let serviceKeys = ["command", "cwd", "port", "type", "open", "env", "envFile", "health", "autostart", "restart", "stop", "autoPort", "install", "needs", "idle"]
+
+    /// Where each service's `needs` sits in the file, to point at it once every id is known.
+    private var needsRefs: [(id: String, path: String, position: JSONPosition?)] = []
 
     mutating func add(_ severity: ConfigIssue.Severity, _ message: String, _ path: String, _ pos: JSONPosition?) {
         issues.append(ConfigIssue(severity: severity, message: message, path: path, line: pos?.line ?? 0, column: pos?.column ?? 0))
@@ -348,6 +373,7 @@ struct ConfigValidator {
                 }
                 guard let svc = service(id: se.key, project: project, obj: so, path: spath, position: se.position) else { continue }
                 seen[se.key] = entry.key
+                if !svc.needs.isEmpty { needsRefs.append((se.key, spath + ".needs", so.position(of: "needs"))) }
                 if let port = svc.port {
                     if let other = ports[port] {
                         add(.warning, "port \(port) is also used by \(other); the two can't run at the same time", spath + ".port", so.position(of: "port"))
@@ -359,7 +385,40 @@ struct ConfigValidator {
             }
             config.projects.append(project)
         }
+        checkNeeds(config)
         return config
+    }
+
+    /// Every id in `needs` exists, and no service ends up waiting for itself.
+    mutating func checkNeeds(_ config: RunbarConfig) {
+        let all = config.services
+        let ids = all.map(\.id)
+        let byID = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for ref in needsRefs {
+            for need in byID[ref.id]?.needs ?? [] where byID[need] == nil {
+                var msg = "needs \"\(need)\" isn't a service in config.json"
+                if let s = Self.suggest(need, ids) { msg += "; did you mean \"\(s)\"?" }
+                add(.error, msg, ref.path, ref.position)
+            }
+        }
+        // A loop would leave every service in it waiting for the next one.
+        var state: [String: Int] = [:]  // 1 visiting, 2 done
+        var reported = Set<String>()
+        func visit(_ id: String, _ trail: [String]) -> [String]? {
+            if state[id] == 2 { return nil }
+            if state[id] == 1 { return Array(trail.drop { $0 != id }) + [id] }
+            state[id] = 1
+            for next in byID[id]?.needs ?? [] where byID[next] != nil {
+                if let loop = visit(next, trail + [id]) { return loop }
+            }
+            state[id] = 2
+            return nil
+        }
+        for ref in needsRefs where state[ref.id] == nil {
+            guard let loop = visit(ref.id, []), !loop.contains(where: reported.contains) else { continue }
+            reported.formUnion(loop)
+            add(.error, "needs makes a loop: \(loop.joined(separator: " → ")); remove one of them", ref.path, ref.position)
+        }
     }
 
     mutating func settings(_ o: JSONObject) -> SettingsConfig {
@@ -483,7 +542,40 @@ struct ConfigValidator {
         }
         let stop = string(o, "stop", path)
         let install = string(o, "install", path)
-        let autoPort = bool(o, "autoPort", path) ?? defaultAutoPort
+        // A proxy's clients connect to a fixed port: it never moves unless the proxy itself asks to.
+        let autoPort = bool(o, "autoPort", path) ?? (type == .proxy ? false : defaultAutoPort)
+
+        var needs: [String] = []
+        if let v = o["needs"], !v.isNull {
+            if case .array(let items) = v {
+                for item in items {
+                    guard case .string(let need) = item, Self.validID(need) else {
+                        add(.error, "needs must list service ids, like [\"acme-db\"]", path + ".needs", o.position(of: "needs"))
+                        break
+                    }
+                    if need == id {
+                        add(.error, "a service can't need itself", path + ".needs", o.position(of: "needs"))
+                    } else if !needs.contains(need) {
+                        needs.append(need)
+                    }
+                }
+            } else {
+                add(.error, "needs must be a list of service ids, like [\"acme-db\"]", path + ".needs", o.position(of: "needs"))
+            }
+        }
+
+        var idle: TimeInterval? = type == .proxy ? IdleSetting.defaultSeconds : nil
+        if let raw = string(o, "idle", path) {
+            switch IdleSetting.parse(raw) {
+            case .never: idle = nil
+            case .after(let seconds): idle = seconds
+            case .invalid: add(.error, "idle must be a duration like \"5m\", \"15m\" or \"1h\", or \"never\"", path + ".idle", o.position(of: "idle"))
+            }
+            if type != .proxy {
+                add(.warning, "idle only applies to proxies (\"type\": \"proxy\")", path + ".idle", o.position(of: "idle"))
+                idle = nil
+            }
+        }
         if let command {
             if command.contains("{port}"), port == nil {
                 add(.warning, "the command uses {port}, but the service has no \"port\"", path + ".command", o.position(of: "command"))
@@ -499,12 +591,14 @@ struct ConfigValidator {
         return ServiceConfig(
             id: id, projectID: project.id, projectName: project.name, command: command, cwd: cwd,
             port: port, type: type, open: open, env: env, envFile: envFile, health: health,
-            autostart: autostart, restart: restart, stop: stop, autoPort: autoPort, install: install
+            autostart: autostart, restart: restart, stop: stop, autoPort: autoPort, install: install,
+            needs: needs, idle: idle
         )
     }
 
     static func guessType(command: String, cwd: String) -> ServiceType {
         let c = command.lowercased()
+        if ProxyTool.detect(command) != .other { return .proxy }
         if c.contains("docker") { return .docker }
         if c.contains("next ") || c.hasSuffix("next") { return .nextjs }
         if ["uvicorn", "gunicorn", "python", "manage.py", "flask", "poetry", "uv run"].contains(where: { c.contains($0) }) { return .python }

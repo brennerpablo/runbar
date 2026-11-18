@@ -1,5 +1,19 @@
 import AppKit
 
+/// The Runbar mark, a `>_` prompt, on a 16 pt grid (y down): a chevron in five steps and the cursor.
+/// The menu bar icon and the panel's mark both draw it from here.
+enum RunbarMark {
+    static let chevron: [CGRect] = [
+        CGRect(x: 1, y: 1, width: 4, height: 2),
+        CGRect(x: 3, y: 4, width: 4, height: 2),
+        CGRect(x: 5, y: 7, width: 4, height: 2),
+        CGRect(x: 3, y: 10, width: 4, height: 2),
+        CGRect(x: 1, y: 13, width: 4, height: 2),
+    ]
+    static let cursor = CGRect(x: 8, y: 13, width: 7, height: 2)
+    static let cells = chevron + [cursor]
+}
+
 /// Menu bar icon drawn as a template image (macOS paints it black or white).
 enum MenuBarIcon {
     enum Badge { case none, alert, busy }
@@ -11,14 +25,11 @@ enum MenuBarIcon {
         let image = NSImage(size: NSSize(width: 19, height: 16), flipped: true) { _ in
             NSColor.black.setStroke()
             NSColor.black.setFill()
-            for y in [2.2, 9.0] as [CGFloat] {
-                let rect = NSBezierPath(roundedRect: NSRect(x: 2, y: y, width: 13, height: 4.8), xRadius: 1.6, yRadius: 1.6)
-                rect.lineWidth = 1.4
-                rect.stroke()
-                NSBezierPath(ovalIn: NSRect(x: 4.1, y: y + 1.5, width: 1.8, height: 1.8)).fill()
+            for cell in RunbarMark.cells {
+                NSBezierPath(rect: cell.offsetBy(dx: 1, dy: 0)).fill()
             }
             guard badge != .none, let ctx = NSGraphicsContext.current else { return true }
-            // Cut a hole in the corner and draw the badge inside it.
+            // Cut a hole in the corner (empty above the chevron) and draw the badge inside it.
             ctx.compositingOperation = .clear
             NSBezierPath(ovalIn: NSRect(x: 11, y: -1, width: 9, height: 9)).fill()
             ctx.compositingOperation = .sourceOver
