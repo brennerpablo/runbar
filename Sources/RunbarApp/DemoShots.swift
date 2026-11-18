@@ -45,6 +45,12 @@ enum DemoShots {
         written.append(render(alone(PopoverView(initialTab: .disk, initialQuery: "node_modules").environment(model)), name: "panel-reinstall", dir: dir, dark: true))
         DiskModel.shared.confirming = nil
         written.append(render(alone(agentWindow(model), radius: 12), name: "panel-agent", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "acme-db").environment(model)), name: "panel-proxy", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "finch-db").environment(model)), name: "panel-proxy-closed", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialQuery: "6379", initialShowOthers: true).environment(model)), name: "panel-launchd", dir: dir, dark: true))
+        if let redis = model.otherListeners.first(where: { $0.port == 6379 }) {
+            written.append(render(alone(PopoverView(initialImport: redis).environment(model)), name: "panel-import", dir: dir, dark: true))
+        }
         print(written.joined(separator: "\n"))
         exit(0)
     }
@@ -153,13 +159,15 @@ enum DemoShots {
       "projects": {
         "acme": { "name": "Acme Store", "root": "~/Developer/acme", "services": {
           "acme-web": { "cwd": "acme-web", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3000 },
-          "acme-api": { "cwd": "acme-api", "type": "python", "command": ".venv/bin/uvicorn app.main:app --reload --port {port}", "port": 8000, "open": "http://localhost:{port}/docs" },
+          "acme-api": { "cwd": "acme-api", "type": "python", "command": ".venv/bin/uvicorn app.main:app --reload --port {port}", "port": 8000, "open": "http://localhost:{port}/docs", "needs": ["acme-db"] },
           "acme-worker": { "cwd": "acme-worker", "type": "node", "command": "npm run worker" },
-          "acme-admin": { "cwd": "acme-admin", "type": "nextjs", "command": "pnpm dev --port {port}", "port": 3001 }
+          "acme-admin": { "cwd": "acme-admin", "type": "nextjs", "command": "pnpm dev --port {port}", "port": 3001 },
+          "acme-db": { "type": "proxy", "command": "cloud-sql-proxy --port {port} acme-prod:us-central1:acme", "port": 5434, "open": "postgres://localhost:{port}/acme" }
         }},
         "finch": { "name": "Blue Finch", "root": "~/Developer/finch", "services": {
           "finch-app": { "cwd": "finch-app", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3100 },
-          "finch-docs": { "cwd": "finch-docs", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3101 }
+          "finch-docs": { "cwd": "finch-docs", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3101 },
+          "finch-db": { "type": "proxy", "command": "kubectl port-forward svc/postgres {port}:5432", "port": 5435 }
         }},
         "moonbase": { "name": "Moonbase", "root": "~/Developer/moonbase", "services": {
           "moonbase-api": { "cwd": "api", "type": "python", "command": ".venv/bin/uvicorn main:app --reload --port {port}", "port": 8100 },
@@ -187,6 +195,10 @@ enum DemoShots {
                 Listener(port: 3100, pid: 4821, name: "node", path: "/opt/homebrew/bin/node"),
                 Listener(port: 5432, pid: 612, name: "postgres", path: "/opt/homebrew/bin/postgres"),
                 Listener(port: 6379, pid: 640, name: "redis-server", path: "/opt/homebrew/bin/redis-server"),
+            ],
+            launchdJobs: [
+                640: LaunchdJob(label: "homebrew.mxcl.redis", pid: 640, plistPath: Paths.home + "/Library/LaunchAgents/homebrew.mxcl.redis.plist",
+                                keepAlive: true, runAtLoad: true, programArguments: ["/opt/homebrew/opt/redis/bin/redis-server", "/opt/homebrew/etc/redis.conf"]),
             ]
         )
         let rt = model.runtimes
@@ -246,6 +258,27 @@ enum DemoShots {
                                   startedAt: now.addingTimeInterval(-16 * 3600 - 39 * 60))
         )
         rt["kite-site"]?.loadDemo(phase: .stopped, exitedAt: ago(130), exitCode: 0, at: now)
+        rt["acme-db"]?.loadDemo(
+            phase: .running, pid: 48202, startedAt: ago(149), lastLogAt: ago(3), memoryMB: 18, cpu: 0.1, processCount: 1, listening: [5434], at: now,
+            logs: [
+                "── Runbar · Nov 12 2026 08:12:01 · cloud-sql-proxy --port 5434 acme-prod:us-central1:acme · in ~/Developer/acme",
+                "2026/11/12 08:12:01 Authorizing with Application Default Credentials",
+                "2026/11/12 08:12:02 [acme-prod:us-central1:acme] Listening on 127.0.0.1:5434",
+                "2026/11/12 08:12:02 The proxy has started successfully and is ready for new connections!",
+                "2026/11/12 08:12:09 [acme-prod:us-central1:acme] Accepted connection from 127.0.0.1:61022",
+                "2026/11/12 10:38:47 [acme-prod:us-central1:acme] Accepted connection from 127.0.0.1:63518",
+            ]
+        )
+        rt["acme-db"]?.loadDemoUsage(
+            clients: [
+                ProxyClient(id: "acme-api", name: "acme-api", serviceID: "acme-api", pid: 48230, connections: 3),
+                ProxyClient(id: "pid-61022", name: "psql", serviceID: nil, pid: 61022, connections: 1),
+            ],
+            heldBy: ["acme-api"]
+        )
+        rt["finch-db"]?.loadDemo(phase: .stopped, exitedAt: ago(12), exitCode: 0, at: now,
+                                 logs: ["── Runbar · Nov 12 2026 10:29:00 · closed after 15 min with no connections"])
+        rt["finch-db"]?.loadDemoUsage(closedIdleAt: ago(12))
 
         let gb: (Double) -> UInt64 = { UInt64($0 * 1_073_741_824) }
         let mb: (Double) -> UInt64 = { UInt64($0 * 1_048_576) }

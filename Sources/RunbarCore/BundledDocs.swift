@@ -83,8 +83,20 @@ public enum BundledDocs {
           "description": "Expected port. Runbar exports PORT=<port> and warns if the service starts on a different one."
         },
         "type": {
-          "enum": ["nextjs", "node", "python", "docker", "java", "other"],
-          "description": "Service type. If omitted, Runbar guesses it from the command."
+          "enum": ["nextjs", "node", "python", "docker", "java", "proxy", "other"],
+          "description": "Service type. If omitted, Runbar guesses it from the command. proxy: a local port forwarded to something remote (cloud-sql-proxy, kubectl port-forward, ssh -L): it opens when a service that needs it starts and closes after idle with no connections."
+        },
+        "needs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+          "uniqueItems": true,
+          "description": "Ids of services (usually proxies) to open before this one starts. Runbar waits up to 30 s for each one's port, and keeps them open while this service runs."
+        },
+        "idle": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?[smh]|never)$",
+          "default": "15m",
+          "description": "Proxies only: how long it may sit with no connections (and no running service that needs it) before Runbar closes it. \"5m\", \"15m\", \"1h\" or \"never\"."
         },
         "open": {
           "type": "string",
@@ -115,7 +127,7 @@ public enum BundledDocs {
         },
         "autoPort": {
           "type": "boolean",
-          "description": "If the port is taken, start on the next free one (skipping the other services' ports). Needs the command to use {port} or the PORT variable. Default: settings.autoPort."
+          "description": "If the port is taken, start on the next free one (skipping the other services' ports). Needs the command to use {port} or the PORT variable. Default: settings.autoPort (always false for proxies, whose clients expect a fixed port)."
         }
       }
     }
@@ -208,7 +220,7 @@ Service:
 | `command`   | string, required                            | command that runs the service in the foreground; `{port}` becomes the port it will start on |
 | `cwd`       | path                                        | relative to `root`, or absolute (default: the `root`) |
 | `port`      | number                                      | expected port; Runbar exports `PORT` and warns if the service starts on a different one |
-| `type`      | `nextjs` `node` `python` `docker` `java` `other` | icon and port rules; guessed from the command if omitted |
+| `type`      | `nextjs` `node` `python` `docker` `java` `proxy` `other` | icon and port rules; guessed from the command if omitted |
 | `open`      | URL                                         | where the Open button goes; `{port}` becomes the real port |
 | `env`       | object                                      | extra environment variables |
 | `envFile`   | path                                        | `KEY=value` file to load, relative to `cwd` |
@@ -217,7 +229,42 @@ Service:
 | `restart`   | `never` `on-crash`                          | restart automatically if it crashes (up to 3 times in 2 minutes) |
 | `stop`      | string                                      | extra command to stop it (e.g. `docker compose down`) |
 | `install`   | string                                      | command that reinstalls dependencies after Runbar deletes `node_modules` or `.venv` (default: picked from the lockfile) |
-| `autoPort`  | `true`/`false`                              | if the port is taken, start on the next free one (default: `settings.autoPort`) |
+| `autoPort`  | `true`/`false`                              | if the port is taken, start on the next free one (default: `settings.autoPort`; always off for proxies) |
+| `needs`     | list of ids                                 | services (usually proxies) opened before this one starts |
+| `idle`      | `5m` `15m` `1h` `never`                     | proxies only: close after this long with no connections (default `15m`) |
+
+## Proxies
+
+A proxy forwards a local port to something remote: `cloud-sql-proxy`, `kubectl
+port-forward`, `ssh -L`, `aws ssm start-session`. Declare it as a service with
+`"type": "proxy"` (Runbar also guesses it from those commands), and list it in
+`needs` of each service that connects through it:
+
+```json
+"takt-api": {
+  "cwd": "takt-api",
+  "command": ".venv/bin/uvicorn app.main:app --reload --port {port}",
+  "port": 8100,
+  "needs": ["takt-db"]
+},
+"takt-db": {
+  "type": "proxy",
+  "command": "cloud-sql-proxy --port {port} my-project:us-east1:takt",
+  "port": 5434,
+  "idle": "15m",
+  "open": "postgres://localhost:{port}/takt"
+}
+```
+
+- Starting `takt-api` opens `takt-db` first and waits for its port.
+- Runbar counts the connections open to the proxy's port. With none, and no
+  service that needs it running, it closes the proxy after `idle`.
+- `open` is the connection URL the app copies (no browser button for proxies).
+- Don't run proxies from a LaunchAgent with `KeepAlive`: launchd would keep the
+  port open all day and restart it whenever it is stopped. Runbar can move such a
+  job into config.json from "ports in use outside Runbar".
+- `runbar open <id> --wait` opens a proxy from the Terminal (for a migration, a
+  `psql` session); it closes on its own after `idle`.
 
 General settings (optional):
 
@@ -281,6 +328,8 @@ runbar status [--json]          status, real port, memory and CPU of each servic
 runbar start <id> [--wait]      start a service (--wait waits for the port to open)
 runbar stop <id>                stop the service and its child processes
 runbar restart <id> [--wait]    restart
+runbar open <id> [--wait]       open a proxy (same as start)
+runbar close <id>               close a proxy (same as stop)
 runbar logs <id> [-n 100] [-f]  the service's output
 runbar path                     the config folder
 ```

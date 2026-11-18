@@ -95,26 +95,50 @@ public enum ProcScanner {
 
     /// TCP ports in LISTEN opened by the process.
     public static func listeningTCPPorts(pid: Int32) -> [Int] {
+        tcpSockets(pid: pid).listening
+    }
+
+    /// The process's TCP sockets: ports it listens on, and the local ports it is connected to (one entry
+    /// per open connection to 127.0.0.1 or ::1), which is how Runbar sees who uses a proxy.
+    public static func tcpSockets(pid: Int32) -> (listening: [Int], loopbackPeers: [Int]) {
         let bytes = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
-        guard bytes > 0 else { return [] }
+        guard bytes > 0 else { return ([], []) }
         let stride = MemoryLayout<proc_fdinfo>.stride
         var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(bytes) / stride + 32)
         let got = fds.withUnsafeMutableBytes { raw in
             proc_pidinfo(pid, PROC_PIDLISTFDS, 0, raw.baseAddress, Int32(raw.count))
         }
-        guard got > 0 else { return [] }
+        guard got > 0 else { return ([], []) }
         var ports = Set<Int>()
+        var peers: [Int] = []
         for fd in fds.prefix(Int(got) / stride) where fd.proc_fdtype == UInt32(PROX_FDTYPE_SOCKET) {
             var si = socket_fdinfo()
             let sz = Int32(MemoryLayout<socket_fdinfo>.size)
             guard proc_pidfdinfo(pid, fd.proc_fd, PROC_PIDFDSOCKETINFO, &si, sz) == sz else { continue }
             guard si.psi.soi_kind == Int32(SOCKINFO_TCP) else { continue }
             let tcp = si.psi.soi_proto.pri_tcp
-            guard tcp.tcpsi_state == Int32(TSI_S_LISTEN) else { continue }
-            let port = Int(UInt16(bigEndian: UInt16(truncatingIfNeeded: tcp.tcpsi_ini.insi_lport)))
-            if port > 0 { ports.insert(port) }
+            let ini = tcp.tcpsi_ini
+            if tcp.tcpsi_state == Int32(TSI_S_LISTEN) {
+                let port = Int(UInt16(bigEndian: UInt16(truncatingIfNeeded: ini.insi_lport)))
+                if port > 0 { ports.insert(port) }
+            } else if tcp.tcpsi_state == Int32(TSI_S_ESTABLISHED), isLoopback(ini) {
+                let port = Int(UInt16(bigEndian: UInt16(truncatingIfNeeded: ini.insi_fport)))
+                if port > 0 { peers.append(port) }
+            }
         }
-        return ports.sorted()
+        return (ports.sorted(), peers)
+    }
+
+    /// The far end of the socket is this Mac: 127.x.x.x, ::1 or ::ffff:127.x.x.x.
+    private static func isLoopback(_ ini: in_sockinfo) -> Bool {
+        if ini.insi_vflag & UInt8(INI_IPV4) != 0 {
+            return UInt32(bigEndian: ini.insi_faddr.ina_46.i46a_addr4.s_addr) >> 24 == 127
+        }
+        var addr = ini.insi_faddr.ina_6
+        return withUnsafeBytes(of: &addr) { b in
+            if b[0..<15].allSatisfy({ $0 == 0 }) && b[15] == 1 { return true }
+            return b[0..<10].allSatisfy({ $0 == 0 }) && b[10] == 0xFF && b[11] == 0xFF && b[12] == 127
+        }
     }
 }
 
@@ -128,6 +152,9 @@ public struct ProcSnapshot: Sendable {
     public var listening: [Int32: [Int]]
     public var paths: [Int32: String]
     public var cwds: [Int32: String]
+    /// Only the current user's processes: for each one, the local ports it has connections open to
+    /// (one entry per connection).
+    public var loopbackPeers: [Int32: [Int]]
 
     public static func take() -> ProcSnapshot {
         let uid = getuid()
@@ -137,21 +164,45 @@ public struct ProcSnapshot: Sendable {
         var listening: [Int32: [Int]] = [:]
         var paths: [Int32: String] = [:]
         var cwds: [Int32: String] = [:]
+        var peers: [Int32: [Int]] = [:]
         for pid in ProcScanner.allPIDs() {
             guard let s = ProcScanner.sample(pid: pid) else { continue }
             procs[pid] = s
             children[s.ppid, default: []].append(pid)
             groups[s.pgid, default: []].append(pid)
             if s.uid == uid {
-                let ports = ProcScanner.listeningTCPPorts(pid: pid)
-                if !ports.isEmpty {
-                    listening[pid] = ports
+                let sockets = ProcScanner.tcpSockets(pid: pid)
+                if !sockets.listening.isEmpty {
+                    listening[pid] = sockets.listening
                     paths[pid] = ProcScanner.path(pid: pid)
                     cwds[pid] = ProcScanner.cwd(pid: pid)
                 }
+                if !sockets.loopbackPeers.isEmpty { peers[pid] = sockets.loopbackPeers }
             }
         }
-        return ProcSnapshot(time: Date(), procs: procs, children: children, groups: groups, listening: listening, paths: paths, cwds: cwds)
+        return ProcSnapshot(time: Date(), procs: procs, children: children, groups: groups, listening: listening,
+                            paths: paths, cwds: cwds, loopbackPeers: peers)
+    }
+
+    /// Who is connected to `ports`, leaving out `own` (the server itself): pid → open connections.
+    public func clients(of ports: Set<Int>, excluding own: Set<Int32>) -> [Int32: Int] {
+        var out: [Int32: Int] = [:]
+        for (pid, peerPorts) in loopbackPeers where !own.contains(pid) {
+            let n = peerPorts.filter(ports.contains).count
+            if n > 0 { out[pid] = n }
+        }
+        return out
+    }
+
+    /// The process and its parents, closest first, up to launchd.
+    public func ancestry(of pid: Int32) -> [Int32] {
+        var out: [Int32] = []
+        var current: Int32? = pid
+        while let p = current, p > 1, out.count < 16, let s = procs[p] {
+            out.append(p)
+            current = s.ppid
+        }
+        return out
     }
 
     /// The process, its descendants and anything in the same process group.

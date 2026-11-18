@@ -53,6 +53,14 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
 - With `autoPort`, a service whose port is taken starts on the next free one.
 - Services started outside Runbar (in Terminal, for example) are recognized by their folder.
 - Ports held by other processes are listed, and the menu bar icon flags alerts.
+- A port held by a LaunchAgent with `KeepAlive` says so (Kill wouldn't stick), and can be turned off or moved
+  into Runbar.
+
+**Proxies**
+- Cloud SQL proxies, `kubectl port-forward` and SSH tunnels as services with `"type": "proxy"`: they open when a
+  service that `needs` them starts, and close after `idle` (15 minutes by default) with no connections.
+- Each proxy shows who is connected through it: a Runbar service, `psql`, TablePlus.
+- An expired `gcloud` sign-in shows as such, with a button that signs in again; the proxy reopens on its own.
 
 **Disk**
 - What each project folder holds in build output (`.next`, `.turbo`, Rust and Maven `target`…),
@@ -159,6 +167,7 @@ kite-site               stopped         :4321   —         —
 | `runbar start <id> [--wait]` | Starts a service (`--wait` waits for the port to open) |
 | `runbar stop <id>` | Stops the service and its child processes |
 | `runbar restart <id> [--wait]` | Restarts a service |
+| `runbar open <id> [--wait]` / `runbar close <id>` | Opens or closes a proxy (same as start and stop) |
 | `runbar logs <id> [-n 100] [-f]` | Shows the service's output (`-f` follows it) |
 | `runbar reload` | Makes the app reread config.json now |
 | `runbar path` | Shows the config folder |
@@ -197,7 +206,8 @@ flowchart LR
 | Part | Where |
 |---|---|
 | JSON parser with line/column, and config validation | `Sources/RunbarCore/JSON.swift`, `Config.swift` |
-| Processes: tree, memory (phys_footprint), CPU, LISTEN ports, folder | `Sources/RunbarCore/ProcScanner.swift` (libproc) |
+| Processes: tree, memory (phys_footprint), CPU, LISTEN ports, loopback connections, folder | `Sources/RunbarCore/ProcScanner.swift` (libproc) |
+| Proxies: known tools, sign-in errors, `idle`; launchd jobs behind a port | `Sources/RunbarCore/Proxy.swift`, `Launchd.swift` |
 | Starting a service: login shell, its own process group, output to the log file | `Sources/RunbarCore/Spawner.swift` |
 | Disk: measuring, reinstall commands, guarded deletes | `Sources/RunbarCore/DiskScanner.swift`, `Sources/RunbarApp/DiskModel.swift` |
 | Unix socket between the CLI and the app | `Sources/RunbarCore/Control.swift` |

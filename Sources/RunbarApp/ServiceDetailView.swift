@@ -6,8 +6,13 @@ struct ServiceDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
     let runtime: ServiceRuntime
+    /// Opens another service's detail (a proxy's client, a service's need).
+    var open: ((String) -> Void)?
     let onBack: () -> Void
     @ViewState private var copied = false
+    @ViewState private var copiedURL = false
+
+    private var isProxy: Bool { runtime.config.isProxy }
 
     var body: some View {
         let d = model.display(runtime)
@@ -44,11 +49,22 @@ struct ServiceDetailView: View {
                         Banner(text: note, actionLabel: "Restart now", action: { runtime.restart() })
                     }
                     actions(d)
-                    if d.isAlive || d.isExternal { facts(d) }
-                    if d.isAlive { charts }
-                    command
-                    folder
-                    DiskSection(runtime: runtime)
+                    if isProxy {
+                        if d.isAlive || d.isExternal {
+                            facts(d)
+                            connectedNow
+                        }
+                        opensWith
+                        idlePicker
+                        command
+                    } else {
+                        if d.isAlive || d.isExternal { facts(d) }
+                        if !runtime.config.needs.isEmpty { needsSection }
+                        if d.isAlive { charts }
+                        command
+                        folder
+                        DiskSection(runtime: runtime)
+                    }
                     logs
                 }
                 .padding(.horizontal, theme.gutter)
@@ -66,7 +82,7 @@ struct ServiceDetailView: View {
                 .font(.system(size: 19, weight: .semibold))
                 .tracking(-0.2)
                 .lineLimit(1)
-            Text("\(runtime.config.projectName) · \(runtime.config.type.label)")
+            Text("\(runtime.config.projectName) · \(isProxy ? runtime.config.proxyTool.label : runtime.config.type.label)")
                 .font(.system(size: 12))
                 .foregroundStyle(Color.rbText2)
         }
@@ -101,7 +117,60 @@ struct ServiceDetailView: View {
         }
     }
 
+    @ViewBuilder
     private func actions(_ d: ServiceDisplay) -> some View {
+        if runtime.phase == .waiting {
+            HStack(spacing: 8) {
+                Button("Don't start") { runtime.stop() }.rbButton(theme)
+            }
+            .controlSize(.regular)
+        } else if isProxy {
+            proxyActions(d)
+        } else {
+            serviceActions(d)
+        }
+    }
+
+    /// A proxy has nothing to open in a browser: its main action is the URL clients connect to.
+    private func proxyActions(_ d: ServiceDisplay) -> some View {
+        HStack(spacing: 8) {
+            if d.isAlive || d.isExternal {
+                if let url = runtime.config.url(port: d.realPort ?? runtime.expectedPort) {
+                    Button {
+                        Pasteboard.copy(url.absoluteString)
+                        copiedURL = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedURL = false }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: copiedURL ? "checkmark" : "doc.on.doc").font(.system(size: 10, weight: .semibold))
+                            Text(copiedURL ? "Copied" : "Copy \(url.scheme ?? "connection") URL")
+                        }
+                    }
+                    .rbButton(theme, prominent: true)
+                    .help(url.absoluteString)
+                }
+                if d.isExternal {
+                    Button("Stop") { runtime.stopExternal() }.rbButton(theme)
+                } else {
+                    Button("Restart") { runtime.restart() }.rbButton(theme)
+                    Button("Close") { runtime.stop() }.rbButton(theme).disabled(runtime.phase == .stopping)
+                }
+            } else {
+                Button {
+                    runtime.start()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: d.action == .retry ? "arrow.clockwise" : "play.fill").font(.system(size: 9.5, weight: .bold))
+                        Text(d.action == .retry ? "Try again" : "Open\(runtime.expectedPort.map { " :\($0)" } ?? "")")
+                    }
+                }
+                .rbButton(theme, prominent: true)
+            }
+        }
+        .controlSize(.regular)
+    }
+
+    private func serviceActions(_ d: ServiceDisplay) -> some View {
         HStack(spacing: 8) {
             if let url = d.url, d.isAlive || d.isExternal {
                 Button {
@@ -144,7 +213,12 @@ struct ServiceDetailView: View {
         let since = started.map { Format.clock($0, now: model.now) } ?? "—"
         let uptime = started.map { Format.duration(model.now.timeIntervalSince($0)) } ?? "—"
         let items: [(String, String)]
-        if d.isExternal {
+        if isProxy {
+            items = [
+                ("Port", d.portLabel ?? "—"), ("Connections", "\(runtime.connectionCount)"), ("PID", pid.map(String.init) ?? "—"),
+                ("Since", since), ("Uptime", uptime), ("Closes", d.isExternal ? "—" : model.closesText(runtime)),
+            ]
+        } else if d.isExternal {
             // No history or log: memory and CPU go here instead.
             items = [
                 ("Port", d.portLabel ?? "—"), ("PID", pid.map(String.init) ?? "—"), ("Memory", d.memory.map { Format.memory($0) } ?? "—"),
@@ -201,6 +275,191 @@ struct ServiceDetailView: View {
                     .foregroundStyle(Color.rbText2)
             }
         }
+    }
+
+    // MARK: - Proxies and what services need
+
+    /// Who holds the proxy's connections right now.
+    private var connectedNow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "Connected now").padding(.leading, 2)
+            VStack(spacing: 0) {
+                if runtime.clients.isEmpty {
+                    Text(nobodyConnected)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.rbText2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, Layout.rowInset)
+                        .padding(.vertical, 11)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ForEach(Array(runtime.clients.enumerated()), id: \.element.id) { index, client in
+                    if index > 0 { Rectangle().fill(Color.rbHairline).frame(height: 1) }
+                    clientRow(client)
+                }
+            }
+            .rbCard(theme, radius: 12)
+        }
+    }
+
+    private var nobodyConnected: String {
+        if !runtime.heldBy.isEmpty {
+            return "Nothing is connected, but \(runtime.heldBy.joined(separator: ", ")) \(runtime.heldBy.count == 1 ? "keeps" : "keep") it open."
+        }
+        if runtime.closesAt != nil { return "Nothing is connected. It closes \(model.closesText(runtime)) unless something connects." }
+        return "Nothing is connected."
+    }
+
+    @ViewBuilder
+    private func clientRow(_ client: ProxyClient) -> some View {
+        let row = HStack(spacing: Layout.dotGap) {
+            if client.serviceID != nil {
+                StatusDot(dot: .running)
+            } else {
+                Image(systemName: "terminal").font(.system(size: 10)).foregroundStyle(Color.rbText3).frame(width: Layout.dot)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(client.name).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                Text(verbatim: client.serviceID.flatMap { model.config.service($0) }.map { "Runbar service · \($0.projectName)" } ?? "PID \(client.pid)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.rbText2)
+            }
+            Spacer(minLength: 4)
+            Text("\(client.connections) conn")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Color.rbText2)
+        }
+        .padding(.horizontal, Layout.rowInset)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        if let sid = client.serviceID, let open {
+            Button { open(sid) } label: { row }.buttonStyle(.plain).accessibilityHint("Open \(sid)")
+        } else {
+            row
+        }
+    }
+
+    /// Services that open this proxy before they start; added and removed here, saved to their `needs`.
+    private var opensWith: some View {
+        let deps = model.config.dependents(of: runtime.id)
+        let candidates = model.config.projects.map { p in
+            (p, p.services.filter { !$0.isProxy && !$0.needs.contains(runtime.id) })
+        }.filter { !$0.1.isEmpty }
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center) {
+                SectionLabel(text: "Opens with").padding(.leading, 2)
+                Spacer()
+                Menu {
+                    ForEach(candidates, id: \.0.id) { project, services in
+                        Section(project.name) {
+                            ForEach(services) { svc in
+                                Button(svc.id) { model.setNeeds(svc.id, opens: runtime.id, true) }
+                            }
+                        }
+                    }
+                } label: {
+                    Text("Add service…")
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .buttonStyle(TextButtonStyle(accent: true, size: 11.5))
+                .fixedSize()
+                .padding(.trailing, -6)
+                .disabled(candidates.isEmpty || model.configError != nil)
+            }
+            .frame(height: 18)
+            VStack(spacing: 0) {
+                if deps.isEmpty {
+                    Text("No service opens \(runtime.id) yet. Add the ones that use it: starting one opens \(runtime.id) first.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.rbText2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, Layout.rowInset)
+                        .padding(.vertical, 11)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ForEach(Array(deps.enumerated()), id: \.element.id) { index, svc in
+                    if index > 0 { Rectangle().fill(Color.rbHairline).frame(height: 1) }
+                    if let rt = model.runtimes[svc.id] {
+                        linkedRow(rt, trailing: {
+                            Button { model.setNeeds(svc.id, opens: runtime.id, false) } label: {
+                                Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                            }
+                            .buttonStyle(IconButtonStyle())
+                            .help("\(svc.id) stops opening \(runtime.id)")
+                            .accessibilityLabel("Remove \(svc.id)")
+                        })
+                    }
+                }
+            }
+            .rbCard(theme, radius: 12)
+            if !deps.isEmpty {
+                Text("Starting one of these opens \(runtime.id) first and waits for its port. While any of them runs, \(runtime.id) stays open.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color.rbText2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    private var idlePicker: some View {
+        let current = IdleSetting.text(runtime.config.idle)
+        var options = IdleSetting.presets
+        if !options.contains(current) { options.insert(current, at: options.count - 1) }
+        return VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "Close when idle").padding(.leading, 2)
+            IdleSegments(options: options, selection: current) { model.setIdle($0, for: runtime.id) }
+                .disabled(model.configError != nil)
+            Text("Idle means no connections and nothing from Opens with running. Saved to config.json as \"idle\": \"\(current)\".")
+                .font(.system(size: 11.5))
+                .foregroundStyle(Color.rbText2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 2)
+        }
+    }
+
+    /// What a service opens before it starts (`needs`).
+    private var needsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "Opens first").padding(.leading, 2)
+            VStack(spacing: 0) {
+                ForEach(Array(runtime.config.needs.enumerated()), id: \.element) { index, id in
+                    if index > 0 { Rectangle().fill(Color.rbHairline).frame(height: 1) }
+                    if let rt = model.runtimes[id] { linkedRow(rt, trailing: { EmptyView() }) }
+                }
+            }
+            .rbCard(theme, radius: 12)
+        }
+    }
+
+    /// Another service as a row: dot, id, its second line, port; opens its detail.
+    @ViewBuilder
+    private func linkedRow<Trailing: View>(_ rt: ServiceRuntime, @ViewBuilder trailing: () -> Trailing) -> some View {
+        let d = model.display(rt)
+        HStack(spacing: 8) {
+            Button { open?(rt.id) } label: {
+                HStack(spacing: Layout.dotGap) {
+                    StatusDot(dot: d.dot)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rt.id).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                        Text(d.subtitle)
+                            .font(d.subtitleMono ? .system(size: 10.5, design: .monospaced) : .system(size: 11))
+                            .foregroundStyle(d.warn ? Color.rbWarn : Color.rbText2)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    if let label = d.portLabel { Pill(text: label, tone: rt.isRunningAnywhere ? .live : .idle) }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Open \(rt.id)")
+            trailing()
+        }
+        .padding(.leading, Layout.rowInset)
+        .padding(.trailing, 6)
+        .frame(minHeight: 44)
     }
 
     // MARK: - Command, folder and output
@@ -408,6 +667,53 @@ private struct BarHistory: View {
         }
         if minutes >= 30 { return "last 30 min" }
         return minutes <= 1 ? "last minute" : "last \(minutes) min"
+    }
+}
+
+// MARK: - Close-when-idle choice
+
+/// 5 min / 15 min / 1 hour / Never, in the look of the status filter.
+struct IdleSegments: View {
+    let options: [String]
+    let selection: String
+    let pick: (String) -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        let outer = RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
+        let inner = RoundedRectangle(cornerRadius: theme.controlRadius - 2, style: .continuous)
+        HStack(spacing: 2) {
+            ForEach(options, id: \.self) { option in
+                let on = option == selection
+                Button { if !on { pick(option) } } label: {
+                    Text(Self.label(option))
+                        .font(.system(size: 11.5, weight: on ? .semibold : .regular))
+                        .foregroundStyle(on ? Color.primary : Color.rbText2)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 24)
+                        .background {
+                            if on {
+                                inner.fill(Color.rbSegmentOn).shadow(color: .black.opacity(0.14), radius: 0.5, y: 0.5)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Color.rbControl, in: outer)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Close when idle")
+    }
+
+    static func label(_ option: String) -> String {
+        switch IdleSetting.parse(option) {
+        case .never: return "Never"
+        case .after(let seconds): return IdleSetting.human(seconds)
+        case .invalid: return option
+        }
     }
 }
 

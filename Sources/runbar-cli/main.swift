@@ -12,6 +12,8 @@ usage:
   runbar start <id> [--wait]           start a service (--wait waits for the port to open)
   runbar stop <id>                     stop the service and its child processes
   runbar restart <id> [--wait]         restart a service
+  runbar open <id> [--wait]            open a proxy (same as start)
+  runbar close <id>                    close a proxy (same as stop)
   runbar logs <id> [-n 100] [-f]       show the service's output (-f follows it)
   runbar reload                        make the app reread config.json now
   runbar path                          show the config folder
@@ -58,7 +60,9 @@ func request(_ cmd: String, _ id: String? = nil, timeout: TimeInterval = 10) -> 
 }
 
 var args = Array(CommandLine.arguments.dropFirst())
-let command = args.isEmpty ? "help" : args.removeFirst()
+let typed = args.isEmpty ? "help" : args.removeFirst()
+/// `open` and `close` read better for proxies; they are start and stop.
+let command = ["open": "start", "close": "stop"][typed] ?? typed
 let flags = Set(args.filter { $0.hasPrefix("-") })
 let positional = args.filter { !$0.hasPrefix("-") }
 
@@ -107,41 +111,68 @@ case "status":
         exit(0)
     }
     if let err = response.configError { print("config.json has an error: \(err)\n") }
-    let names: [String: String] = ["running": "running", "starting": "starting", "stopping": "stopping", "stopped": "stopped", "crashed": "crashed", "failed": "failed to start", "external": "outside Runbar"]
+    let names: [String: String] = ["running": "running", "starting": "starting", "stopping": "stopping", "stopped": "stopped", "waiting": "waiting", "crashed": "crashed", "failed": "failed to start", "external": "outside Runbar"]
+    let proxyNames: [String: String] = ["running": "open", "starting": "opening", "stopping": "closing", "stopped": "closed", "failed": "failed to open"]
     print(pad("SERVICE", 24) + pad("STATUS", 16) + pad("PORT", 8) + pad("MEM", 10) + pad("CPU", 8) + "SINCE")
     for s in services {
         let port = (s.realPort ?? s.port).map { ":\($0)" } ?? "—"
-        let mem = s.memoryMB.map { Format.memory(UInt64($0 * 1_048_576)) } ?? "—"
-        let cpu = s.cpuPercent.map { Format.cpu($0) } ?? "—"
+        var mem = s.memoryMB.map { Format.memory(UInt64($0 * 1_048_576)) } ?? "—"
+        var cpu = s.cpuPercent.map { Format.cpu($0) } ?? "—"
+        // A proxy's number is who uses it.
+        if s.isProxy, let n = s.connections {
+            mem = "\(n) conn"
+            cpu = "—"
+        }
         let since = s.startedAt.map { Format.clock($0) } ?? ""
-        var line = pad(s.id, 24) + pad(names[s.status] ?? s.status, 16) + pad(port, 8) + pad(mem, 10) + pad(cpu, 8) + since
+        let status = (s.isProxy ? proxyNames[s.status] : nil) ?? names[s.status] ?? s.status
+        var line = pad(s.id, 24) + pad(status, 16) + pad(port, 8) + pad(mem, 10) + pad(cpu, 8) + since
+        if let waiting = s.waitingFor, !waiting.isEmpty { line += "  waiting for \(waiting.joined(separator: ", "))" }
+        if let closes = s.closesAt { line += "  closes \(Format.clock(closes)) if idle" }
         if let alert = s.alert { line += "  ⚠ \(alert)" }
         print(line)
     }
 
 case "start", "stop", "restart":
-    guard let id = positional.first else { fail("usage: runbar \(command) <id>") }
+    guard let id = positional.first else { fail("usage: runbar \(typed) <id>") }
     ensureApp()
     let response = request(command, id)
     guard response.ok else { fail("error: \(response.error ?? "failed")") }
     if command != "stop", flags.contains("--wait") {
         let deadline = Date().addingTimeInterval(120)
         var last = ""
+        var announced = Set<String>()
         while Date() < deadline {
-            usleep(1_000_000)
-            guard let s = request("status").services?.first(where: { $0.id == id }) else { break }
+            usleep(500_000)
+            let all = request("status").services ?? []
+            guard let s = all.first(where: { $0.id == id }) else { break }
             if s.status != last {
                 last = s.status
             }
+            // What it needs, as each one opens.
+            for need in s.needs ?? [] where !announced.contains(need) {
+                guard let n = all.first(where: { $0.id == need }) else { continue }
+                if n.status == "running" || n.status == "external" {
+                    announced.insert(need)
+                    print("\(need) open" + ((n.realPort ?? n.port).map { " on :\($0)" } ?? ""))
+                } else if n.status == "crashed" || n.status == "failed" {
+                    announced.insert(need)
+                    print("\(need) didn't open" + (n.alert.map { ": \($0)" } ?? ""))
+                }
+            }
             if s.status == "running" {
                 let real = s.realPort ?? s.activePort ?? s.port
-                var line = "\(id) running" + (real.map { " on :\($0)" } ?? "")
+                var line = "\(id) \(s.isProxy ? "open" : "running")" + (real.map { " on :\($0)" } ?? "")
                 if let p = s.port, let real, real != p { line += " (:\(p) was taken)" }
+                if s.isProxy, let closes = s.closesAt { line += " · closes \(Format.clock(closes)) if nothing connects" }
                 if let alert = s.alert { line += " — \(alert)" }
                 print(line)
                 exit(0)
             }
-            if s.status == "crashed" || s.status == "failed" {
+            if s.status == "failed" {
+                print("\(id) didn't start" + (s.alert.map { ": \($0)" } ?? ""))
+                exit(1)
+            }
+            if s.status == "crashed" {
                 print("\(id) crashed" + (s.exitCode.map { " (exit code \($0))" } ?? ""))
                 for line in LogTailer.lastLines(of: Paths.logFile(for: id), count: 15) { print("  \(line)") }
                 exit(1)

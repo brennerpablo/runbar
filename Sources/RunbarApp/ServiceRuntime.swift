@@ -41,11 +41,22 @@ struct MetricPoint: Identifiable, Equatable {
     let value: Double
 }
 
+/// Something connected to a proxy: a Runbar service (all its processes together) or another process.
+struct ProxyClient: Identifiable, Equatable {
+    var id: String
+    var name: String
+    var serviceID: String?
+    var pid: Int32
+    var connections: Int
+}
+
 /// Live state of a service: process, log, ports, memory and CPU.
 @MainActor @Observable
 final class ServiceRuntime: Identifiable {
     enum Phase: Equatable {
         case stopped, starting, running, stopping
+        /// Opening what it needs (`needs`) before starting.
+        case waiting
         case crashed(Int32?)
         case failed(String)
     }
@@ -74,6 +85,20 @@ final class ServiceRuntime: Identifiable {
     private(set) var fallbackFrom: Int?
     var healthy: Bool?
     private(set) var external: ExternalRun?
+    /// While waiting: the services from `needs` that aren't open yet.
+    private(set) var waitingFor: [String] = []
+
+    // Proxies, kept up to date by the model on every scan.
+    /// Who is connected now.
+    var clients: [ProxyClient] = []
+    /// Running services that need this proxy: it stays open while any of them runs.
+    var heldBy: [String] = []
+    /// Since when nothing uses it (no connections, no service holding it).
+    var idleSince: Date?
+    /// When Runbar last closed it for being idle (cleared on the next start).
+    private(set) var closedIdleAt: Date?
+    /// The log since the last start says the tool's sign-in expired, and when Runbar first saw it.
+    private(set) var signInExpiredAt: Date?
 
     @ObservationIgnored private(set) var treePIDs: Set<Int32> = []
     @ObservationIgnored private(set) var processStart: Double?
@@ -92,6 +117,7 @@ final class ServiceRuntime: Identifiable {
     @ObservationIgnored private var stopHelpers: [DispatchSourceProcess] = []
     @ObservationIgnored weak var model: AppModel?
     @ObservationIgnored private var externalCPU: (root: Int32, nanos: UInt64, at: Date)?
+    @ObservationIgnored private var waitTask: Task<Void, Never>?
 
     init(config: ServiceConfig, model: AppModel) {
         self.id = config.id
@@ -118,6 +144,15 @@ final class ServiceRuntime: Identifiable {
 
     var lastLine: String? { logs.last(where: { $0.kind != .meta })?.text }
 
+    /// Connections open to the proxy right now.
+    var connectionCount: Int { clients.reduce(0) { $0 + $1.connections } }
+
+    /// When an idle proxy closes, if nothing connects first.
+    var closesAt: Date? {
+        guard config.isProxy, isAlive, phase == .running, let idleSince, let idle = config.idle else { return nil }
+        return idleSince.addingTimeInterval(idle)
+    }
+
     func update(config newConfig: ServiceConfig) {
         orphaned = false
         if newConfig != config { config = newConfig }
@@ -125,10 +160,64 @@ final class ServiceRuntime: Identifiable {
 
     // MARK: - Lifecycle
 
+    /// Starts the service, opening what it needs first: it waits (phase `.waiting`) until each one's port
+    /// answers, up to 30 seconds.
     func start() {
-        guard !isAlive else { return }
+        guard !isAlive, phase != .waiting else { return }
         restartWork?.cancel()
         restartWork = nil
+        if let model, !config.needs.isEmpty {
+            switch model.openNeeds(of: config) {
+            case .ready:
+                break
+            case .failed(let message):
+                phase = .failed(message)
+                return
+            case .pending(let ids):
+                wait(for: ids)
+                return
+            }
+        }
+        launch()
+    }
+
+    private func wait(for ids: [String]) {
+        waitingFor = ids
+        phase = .waiting
+        let deadline = Date().addingTimeInterval(30)
+        waitTask?.cancel()
+        waitTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard let self, self.phase == .waiting, let model = self.model else { return }
+                // Something it needs closed meanwhile (idle, or by hand) opens again: this one still wants it.
+                switch model.openNeeds(of: self.config, retryFailed: false) {
+                case .ready:
+                    self.waitTask = nil
+                    self.waitingFor = []
+                    self.phase = .stopped
+                    self.launch()
+                    return
+                case .failed(let message):
+                    self.waitTask = nil
+                    self.waitingFor = []
+                    self.phase = .failed(message)
+                    return
+                case .pending(let ids):
+                    if ids != self.waitingFor { self.waitingFor = ids }
+                    if Date() > deadline {
+                        self.waitTask = nil
+                        self.waitingFor = []
+                        self.phase = .failed("\(ids.joined(separator: ", ")) didn't open in 30 seconds")
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    private func launch() {
+        guard !isAlive else { return }
         let cfg = config
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: cfg.cwd, isDirectory: &isDir), isDir.boolValue else {
@@ -158,6 +247,9 @@ final class ServiceRuntime: Identifiable {
             fallbackFrom = fallback
             userStopped = false
             gaveUpRestarting = false
+            closedIdleAt = nil
+            idleSince = nil
+            clients = []
             appliedSignature = cfg.launchSignature
             memHistory = []
             cpuHistory = []
@@ -186,6 +278,13 @@ final class ServiceRuntime: Identifiable {
         restartWork?.cancel()
         restartWork = nil
         restartAfterExit = false
+        if phase == .waiting {
+            waitTask?.cancel()
+            waitTask = nil
+            waitingFor = []
+            phase = .stopped
+            return
+        }
         guard let pid else {
             switch phase {
             case .crashed, .failed: phase = .stopped
@@ -217,6 +316,22 @@ final class ServiceRuntime: Identifiable {
         } else {
             start()
         }
+    }
+
+    /// A proxy nothing used for its whole `idle` time: closed, with a line in its log saying why.
+    func closeForIdle() {
+        guard isAlive, let idle = config.idle else { return }
+        writeMeta("closed after \(IdleSetting.human(idle)) with no connections")
+        stop()
+        closedIdleAt = Date()
+    }
+
+    /// A "── Runbar" line in the service's log, for things Runbar did to it.
+    private func writeMeta(_ text: String) {
+        guard let handle = try? FileHandle(forWritingTo: logURL) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        handle.write(Data("── Runbar · \(Format.stamp(Date())) · \(text)\n".utf8))
     }
 
     /// Terminates immediately (Runbar quitting).
@@ -371,13 +486,33 @@ final class ServiceRuntime: Identifiable {
     private func append(_ lines: [String], markActivity: Bool) {
         guard !lines.isEmpty else { return }
         var batch = logs
+        // A proxy's sign-in counts as expired from the line that says so until the next start.
+        let tool = config.isProxy ? config.proxyTool : .other
+        var expired = signInExpiredAt != nil
         for l in lines {
             nextLineID += 1
-            batch.append(LogLine(id: nextLineID, text: l))
+            let line = LogLine(id: nextLineID, text: l)
+            batch.append(line)
+            if line.kind == .meta { expired = false } else if tool.isSignInProblem(l) { expired = true }
         }
         if batch.count > 600 { batch.removeFirst(batch.count - 500) }
         logs = batch
         if markActivity, lines.contains(where: { !$0.hasPrefix("── Runbar") }) { lastLogAt = Date() }
+        if expired != (signInExpiredAt != nil) { signInExpiredAt = expired ? Date() : nil }
+    }
+
+    /// The user signed in again: a proxy that was open or failing tries again; a closed one just forgets.
+    func signedInAgain() {
+        guard signInExpiredAt != nil else { return }
+        signInExpiredAt = nil
+        if isAlive {
+            restart()
+        } else {
+            switch phase {
+            case .crashed, .failed: start()
+            default: break
+            }
+        }
     }
 
     func pollLog() { tailer?.poll() }
@@ -465,6 +600,18 @@ final class ServiceRuntime: Identifiable {
         for p in e.pids { kill(p, SIGTERM) }
     }
 
+    /// A proxy's connections and holders from the latest scan, and the idle clock that follows from them.
+    func applyUsage(clients newClients: [ProxyClient], heldBy holders: [String], at time: Date) {
+        if newClients != clients { clients = newClients }
+        if holders != heldBy { heldBy = holders }
+        let inUse = !newClients.isEmpty || !holders.isEmpty
+        if inUse || !isAlive || phase != .running {
+            if idleSince != nil { idleSince = nil }
+        } else if idleSince == nil {
+            idleSince = time
+        }
+    }
+
     func evaluateStarting(portOpenAnywhere: Bool = false) {
         guard phase == .starting, let startedAt else { return }
         let age = Date().timeIntervalSince(startedAt)
@@ -500,6 +647,14 @@ extension ServiceRuntime {
         self.memHistory = points(memHistoryMB, 1_048_576)
         self.cpuHistory = points(cpuSeries, 1)
         self.logs = logs.enumerated().map { LogLine(id: $0.offset, text: $0.element) }
+    }
+
+    /// README screenshots: who uses a made-up proxy.
+    func loadDemoUsage(clients: [ProxyClient] = [], heldBy: [String] = [], idleSince: Date? = nil, closedIdleAt: Date? = nil) {
+        self.clients = clients
+        self.heldBy = heldBy
+        self.idleSince = idleSince
+        self.closedIdleAt = closedIdleAt
     }
 }
 #endif
