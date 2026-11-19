@@ -629,8 +629,10 @@ extension ServiceRuntime {
     /// README screenshots: puts the service in a made-up state (no process behind it).
     func loadDemo(phase: Phase, pid: Int32? = nil, startedAt: Date? = nil, lastLogAt: Date? = nil, exitedAt: Date? = nil,
                   exitCode: Int32? = nil, memoryMB: Double = 0, cpu: Double = 0, processCount: Int = 0, listening: [Int] = [],
-                  memHistoryMB: [Double] = [], cpuSeries: [Double] = [], at now: Date, logs: [String] = [], external: ExternalRun? = nil) {
+                  memHistoryMB: [Double] = [], cpuSeries: [Double] = [], at now: Date, logs: [String] = [], external: ExternalRun? = nil,
+                  waitingFor: [String] = []) {
         self.phase = phase
+        self.waitingFor = waitingFor
         self.pid = pid
         self.startedAt = startedAt
         self.lastLogAt = lastLogAt

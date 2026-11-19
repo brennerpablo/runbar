@@ -396,6 +396,11 @@ extension DiskModel {
         results = []
         self.confirming = confirming
     }
+
+    /// Landing page clips: a clear or reinstall under way (or none).
+    func loadDemoJob(_ job: DiskJob?) {
+        jobs = job.map { [$0.item.id: $0] } ?? [:]
+    }
 }
 #endif
 

@@ -51,8 +51,86 @@ enum DemoShots {
         if let redis = model.otherListeners.first(where: { $0.port == 6379 }) {
             written.append(render(alone(PopoverView(initialImport: redis).environment(model)), name: "panel-import", dir: dir, dark: true))
         }
+        written += clipFrames(model, into: dir, alone: { AnyView(alone($0)) })
         print(written.joined(separator: "\n"))
         exit(0)
+    }
+
+    /// The landing page's clips: the moments between the shots above, from the same data, so that from one frame
+    /// to the next only what the click changed changes. Drawn last, they leave the shots above as they were.
+    private static func clipFrames(_ model: AppModel, into dir: URL, alone: (AnyView) -> AnyView) -> [String] {
+        let now = demoNow
+        let rt = model.runtimes
+        var written: [String] = []
+        func shot(_ view: some View, _ name: String) {
+            written.append(render(alone(AnyView(view.environment(model))), name: name, dir: dir, dark: true))
+        }
+
+        // Services: ▶ on acme-admin, starting, then running on :3001.
+        rt["acme-admin"]?.loadDemo(phase: .starting, pid: 61204, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 52, cpu: 31,
+                                   processCount: 2, at: now, logs: ["> pnpm dev --port 3001"])
+        shot(PopoverView(), "clip-start-starting")
+        rt["acme-admin"]?.loadDemo(phase: .running, pid: 61204, startedAt: now.addingTimeInterval(-4), lastLogAt: now, memoryMB: 274, cpu: 4.6,
+                                   processCount: 3, listening: [3001], at: now,
+                                   logs: ["> pnpm dev --port 3001", "   ▲ Next.js 16.0.3 (Turbopack)", " ✓ Ready in 1.9s"])
+        shot(PopoverView(), "clip-start-running")
+        rt["acme-admin"]?.loadDemo(phase: .stopped, at: now)
+
+        // Disk, before anything below changes the header: the filtered list, Reinstall's confirmation (panel-reinstall),
+        // then the reinstall under way.
+        let modules = path("acme/acme-web/node_modules")
+        DiskModel.shared.confirming = nil
+        shot(PopoverView(initialTab: .disk, initialQuery: "node_modules"), "clip-disk-filtered")
+        if let item = DiskModel.shared.projects.flatMap(\.items).first(where: { $0.id == modules }) {
+            DiskModel.shared.loadDemoJob(DiskJob(item: item, action: .reinstall, services: ["acme-web"], step: .installing,
+                                                 stepStartedAt: Date().addingTimeInterval(-9), startedAt: Date().addingTimeInterval(-14),
+                                                 lastLine: "added 1184 packages, and audited 1185 packages in 9s"))
+            shot(PopoverView(initialTab: .disk, initialQuery: "node_modules"), "clip-disk-installing")
+            DiskModel.shared.loadDemoJob(nil)
+        }
+
+        // Ports: "Kill node and restart this one", then finch-app back on :3100.
+        let listeners = model.otherListeners.filter { $0.port != 3100 }
+        model.loadDemo(config: model.config, now: now, portOwners: [:], otherListeners: listeners, launchdJobs: model.launchdJobs)
+        rt["finch-app"]?.loadDemo(phase: .starting, pid: 61377, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 88, cpu: 38,
+                                  processCount: 2, at: now, logs: ["> next dev -p 3100"])
+        shot(PopoverView(initialSelection: "finch-app"), "clip-port-starting")
+        rt["finch-app"]?.loadDemo(phase: .running, pid: 61377, startedAt: now.addingTimeInterval(-5), lastLogAt: now, memoryMB: 341, cpu: 2.2,
+                                  processCount: 3, listening: [3100],
+                                  memHistoryMB: (0..<120).map { i in 330 + Double((i * 7) % 11) * 2 },
+                                  cpuSeries: (0..<120).map { i in 1 + Double((i * 3) % 4) * 0.5 }, at: now,
+                                  logs: ["   ▲ Next.js 16.0.3 (Turbopack)", "   - Local:        http://localhost:3100", " ✓ Ready in 1.2s"])
+        shot(PopoverView(initialSelection: "finch-app"), "clip-port-fixed")
+
+        // Proxies: acme-db closed with acme-api stopped; starting acme-api opens it first.
+        rt["acme-api"]?.loadDemo(phase: .stopped, exitedAt: now.addingTimeInterval(-13 * 60), exitCode: 0, at: now)
+        rt["acme-db"]?.loadDemo(phase: .stopped, exitedAt: now.addingTimeInterval(-60), exitCode: 0, at: now,
+                                logs: ["── Runbar · Nov 12 2026 10:40:00 · closed after 15 min with no connections"])
+        rt["acme-db"]?.loadDemoUsage(closedIdleAt: now.addingTimeInterval(-60))
+        shot(PopoverView(initialSelection: "acme-db"), "clip-proxy-closed")
+        shot(PopoverView(), "clip-proxy-list-closed")
+        rt["acme-api"]?.loadDemo(phase: .waiting, at: now, waitingFor: ["acme-db"])
+        rt["acme-db"]?.loadDemo(phase: .starting, pid: 61450, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 12, cpu: 8,
+                                processCount: 1, at: now, logs: ["2026/11/12 10:41:02 Authorizing with Application Default Credentials"])
+        rt["acme-db"]?.loadDemoUsage(heldBy: ["acme-api"])
+        shot(PopoverView(), "clip-proxy-list-opening")
+        rt["acme-db"]?.loadDemo(phase: .running, pid: 61450, startedAt: now.addingTimeInterval(-3), lastLogAt: now, memoryMB: 17, cpu: 0.4,
+                                processCount: 1, listening: [5434], at: now,
+                                logs: [
+                                    "── Runbar · Nov 12 2026 10:41:02 · opened for acme-api",
+                                    "2026/11/12 10:41:02 Authorizing with Application Default Credentials",
+                                    "2026/11/12 10:41:03 [acme-prod:us-central1:acme] Listening on 127.0.0.1:5434",
+                                    "2026/11/12 10:41:03 The proxy has started successfully and is ready for new connections!",
+                                    "2026/11/12 10:41:04 [acme-prod:us-central1:acme] Accepted connection from 127.0.0.1:64110",
+                                ])
+        rt["acme-api"]?.loadDemo(phase: .running, pid: 61461, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 162, cpu: 6.1,
+                                 processCount: 2, listening: [8000], at: now, logs: ["INFO:     Application startup complete."])
+        rt["acme-db"]?.loadDemoUsage(clients: [ProxyClient(id: "acme-api", name: "acme-api", serviceID: "acme-api", pid: 61461, connections: 1)],
+                                     heldBy: ["acme-api"])
+        shot(PopoverView(), "clip-proxy-list-open")
+        shot(PopoverView(initialSelection: "acme-db"), "clip-proxy-open")
+
+        return written
     }
 
     // MARK: - Layouts
@@ -180,11 +258,16 @@ enum DemoShots {
     }
     """
 
-    private static func load(_ model: AppModel) {
-        guard let cfg = ConfigLoader.load(data: Data(config.utf8)).config else { fatalError("demo config doesn't parse") }
+    /// The made-up machine's clock: Nov 12 2026, 10:41.
+    private static var demoNow: Date {
         var parts = DateComponents()
         parts.year = 2026; parts.month = 11; parts.day = 12; parts.hour = 10; parts.minute = 41
-        let now = Calendar.current.date(from: parts) ?? Date()
+        return Calendar.current.date(from: parts) ?? Date()
+    }
+
+    private static func load(_ model: AppModel) {
+        guard let cfg = ConfigLoader.load(data: Data(config.utf8)).config else { fatalError("demo config doesn't parse") }
+        let now = demoNow
         func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
         func series(_ n: Int, _ f: (Int) -> Double) -> [Double] { (0..<n).map(f) }
 
