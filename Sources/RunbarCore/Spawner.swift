@@ -18,6 +18,22 @@ public enum Spawner {
         posix_spawn_file_actions_adddup2(&fileActions, 1, 2)
         posix_spawn_file_actions_addchdir_np(&fileActions, cwd)
 
+        return try spawnInNewGroup([shell, "-l", "-c", command], environment: environment, fileActions: &fileActions)
+    }
+
+    /// Starts `argv` (an absolute path first) as leader of a new process group, with no input or
+    /// output, so it outlives Runbar.
+    public static func detached(_ argv: [String]) throws -> pid_t {
+        var fileActions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&fileActions)
+        defer { posix_spawn_file_actions_destroy(&fileActions) }
+        for fd: Int32 in [0, 1, 2] {
+            posix_spawn_file_actions_addopen(&fileActions, fd, "/dev/null", fd == 0 ? O_RDONLY : O_WRONLY, 0)
+        }
+        return try spawnInNewGroup(argv, environment: ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin"], fileActions: &fileActions)
+    }
+
+    private static func spawnInNewGroup(_ args: [String], environment: [String: String], fileActions: inout posix_spawn_file_actions_t?) throws -> pid_t {
         var attr: posix_spawnattr_t?
         posix_spawnattr_init(&attr)
         defer { posix_spawnattr_destroy(&attr) }
@@ -31,7 +47,7 @@ public enum Spawner {
         sigemptyset(&mask)
         posix_spawnattr_setsigmask(&attr, &mask)
 
-        let argv: [UnsafeMutablePointer<CChar>?] = [shell, "-l", "-c", command].map { strdup($0) } + [nil]
+        let argv: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]
         let envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer {
             argv.forEach { free($0) }
@@ -39,7 +55,7 @@ public enum Spawner {
         }
 
         var pid: pid_t = 0
-        let rc = posix_spawn(&pid, shell, &fileActions, &attr, argv, envp)
+        let rc = posix_spawn(&pid, args[0], &fileActions, &attr, argv, envp)
         guard rc == 0 else { throw SpawnError(code: rc) }
         return pid
     }

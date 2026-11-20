@@ -117,6 +117,7 @@ final class AppModel {
             NSApp.terminate(nil)
             return
         }
+        KeepAwake.shared.recover()
         ConfigBootstrap.ensureFiles()
         reloadConfig(force: true)
         adoptFromState()
@@ -240,6 +241,11 @@ final class AppModel {
 
     func setLook(_ look: LookSetting) {
         try? ConfigEditor.set(.string(look.rawValue), at: ["settings", "look"])
+        reloadConfig(force: true)
+    }
+
+    func setActiveProjectsFirst(_ on: Bool) {
+        try? ConfigEditor.set(.bool(on), at: ["settings", "activeProjectsFirst"])
         reloadConfig(force: true)
     }
 
@@ -702,10 +708,13 @@ final class AppModel {
     // MARK: - Notifications
 
     func serviceCrashed(_ rt: ServiceRuntime) {
-        guard config.settings.notifyOnCrash, Bundle.main.bundleIdentifier != nil else { return }
-        let title = "\(rt.id) crashed"
+        guard config.settings.notifyOnCrash else { return }
         let code = rt.lastExitCode.map { "exit code \($0)" } ?? "no exit code"
-        let body = [code, rt.lastLine].compactMap { $0 }.joined(separator: " · ")
+        notify(title: "\(rt.id) crashed", body: [code, rt.lastLine].compactMap { $0 }.joined(separator: " · "))
+    }
+
+    func notify(title: String, body: String) {
+        guard Bundle.main.bundleIdentifier != nil else { return }
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
