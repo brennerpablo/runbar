@@ -40,12 +40,17 @@ struct ServiceDisplay {
     var info: String?
     var fix: FixAction?
     var fixLabel: String?
+    /// One line for "Needs you" when it says more than `subtitle` ("node (PID 4821) holds :3100").
+    var reason: String?
     var note: String?
     /// The alert is still true but the user dismissed it: no strip, no menu bar badge, no count.
     var dismissed = false
 
     /// Identifies one alert: the same text means the same situation.
     var alertKey: String { "\(statusLabel)|\(subtitle)" }
+
+    /// The one-line reason "Needs you" shows.
+    var alertLine: String { reason ?? subtitle }
 
     var actionSymbol: String {
         switch action {
@@ -129,6 +134,7 @@ extension AppModel {
                 d.statusLabel = "Port changed"
                 d.subtitle = "on :\(real) · expected :\(expected)"
                 if let owner = blocker(of: expected) {
+                    d.reason = "\(owner.label) holds :\(expected)"
                     d.banner = "Port :\(expected) was taken by \(owner.label), so the service started on :\(real)."
                     d.fix = fix(for: owner)
                     d.fixLabel = "\(fixLead(owner)) and restart this one"

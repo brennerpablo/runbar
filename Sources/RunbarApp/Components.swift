@@ -87,14 +87,26 @@ struct RunbarGlyph: View {
     }
 }
 
+/// The official logo mark, as in docs/assets/logo-*.svg: the chevron in the text color, the cursor in green.
 struct AppMark: View {
-    var size: CGFloat = 28
+    var size: CGFloat = 12
 
     var body: some View {
-        RunbarGlyph(size: size * 0.64)
-            .foregroundStyle(Color.rbLive)
-            .frame(width: size, height: size)
-            .background(Color.rbLiveSoft, in: RoundedRectangle(cornerRadius: size * 0.32, style: .continuous))
+        Canvas { context, canvas in
+            let b = RunbarMark.Official.bounds
+            let s = canvas.width / b.width
+            func path(_ cells: [CGRect]) -> Path {
+                Path { p in
+                    for c in cells {
+                        p.addRect(CGRect(x: (c.minX - b.minX) * s, y: (c.minY - b.minY) * s, width: c.width * s, height: c.height * s))
+                    }
+                }
+            }
+            context.fill(path(RunbarMark.Official.chevron), with: .color(.primary))
+            context.fill(path([RunbarMark.Official.cursor]), with: .color(.rbLiveFill))
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
@@ -206,6 +218,8 @@ struct StatTile<Trailing: View>: View {
     let label: String
     let value: String
     var unit: String?
+    /// Green text after the unit ("+1 proxy").
+    var accent: String?
     /// Lighter step: the tile whose view is showing.
     var raised = false
     var live = false
@@ -238,7 +252,7 @@ struct StatTile<Trailing: View>: View {
             Spacer(minLength: 0)
             HStack(alignment: .lastTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .monospacedDigit()
                     .tracking(-0.5)
                     .lineLimit(1)
@@ -252,11 +266,19 @@ struct StatTile<Trailing: View>: View {
                         .lineLimit(1)
                         .fixedSize()
                 }
+                if let accent {
+                    Text(accent)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Color.rbLive)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.leading, 3)
+                }
                 Spacer(minLength: 4)
                 trailing
             }
         }
-        .padding(EdgeInsets(top: 9, leading: 12, bottom: 8, trailing: 10))
+        .padding(EdgeInsets(top: 8, leading: 12, bottom: 7, trailing: 10))
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: Layout.tileHeight)
         .rbCard(theme, raised: raised)
@@ -377,23 +399,25 @@ private struct RBButtonBody: View {
 struct RowActionButtonStyle: ButtonStyle {
     enum Tone { case neutral, live, warn }
     var tone: Tone = .neutral
+    var size: CGFloat = Layout.control
 
     func makeBody(configuration: Configuration) -> some View {
-        RowActionBody(configuration: configuration, tone: tone)
+        RowActionBody(configuration: configuration, tone: tone, size: size)
     }
 }
 
 private struct RowActionBody: View {
     let configuration: ButtonStyleConfiguration
     let tone: RowActionButtonStyle.Tone
+    let size: CGFloat
     @ViewState private var hover = false
 
     var body: some View {
         let active = hover || configuration.isPressed
         configuration.label
-            .font(.system(size: 9.5, weight: .bold))
+            .font(.system(size: size < Layout.control ? 8.5 : 9.5, weight: .bold))
             .foregroundStyle(foreground)
-            .frame(width: Layout.control, height: Layout.control)
+            .frame(width: size, height: size)
             .background {
                 switch tone {
                 case .neutral:
@@ -421,23 +445,27 @@ private struct RowActionBody: View {
 
 /// Header icon (refresh, add, more): no border, highlight on hover.
 struct IconButtonStyle: ButtonStyle {
+    /// A toggle that is on: tinted in the app's color.
+    var on = false
+
     func makeBody(configuration: Configuration) -> some View {
-        IconButtonBody(configuration: configuration)
+        IconButtonBody(configuration: configuration, on: on)
     }
 }
 
 private struct IconButtonBody: View {
     let configuration: ButtonStyleConfiguration
+    let on: Bool
     @Environment(\.theme) private var theme
     @ViewState private var hover = false
 
     var body: some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Color.rbText2)
+            .foregroundStyle(on ? Color.rbLive : Color.rbText2)
             .frame(width: Layout.control, height: Layout.control)
             .background(
-                configuration.isPressed ? Color.rbControlHover : (hover ? Color.rbControl : Color.clear),
+                configuration.isPressed ? Color.rbControlHover : (on ? Color.rbLiveSoft : (hover ? Color.rbControl : Color.clear)),
                 in: RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
             )
             .contentShape(Rectangle())
@@ -477,9 +505,10 @@ private struct TextButtonBody: View {
     }
 }
 
-/// All / Running / Stopped filter.
+/// All / Running / Stopped filter, with how many rows each one shows.
 struct SegmentedFilter: View {
     @Binding var selection: StatusFilter
+    var counts: [StatusFilter: Int] = [:]
     @Environment(\.theme) private var theme
 
     private let options: [(StatusFilter, String)] = [(.all, "All"), (.running, "Running"), (.stopped, "Stopped")]
@@ -491,20 +520,29 @@ struct SegmentedFilter: View {
             ForEach(options, id: \.0) { option, label in
                 let on = selection == option
                 Button { selection = option } label: {
-                    Text(label)
-                        .font(.system(size: 11.5, weight: on ? .semibold : .regular))
-                        .foregroundStyle(on ? Color.primary : Color.rbText2)
-                        .padding(.horizontal, 9)
-                        .frame(height: 22)
-                        .background {
-                            if on {
-                                inner.fill(Color.rbSegmentOn)
-                                    .shadow(color: .black.opacity(0.14), radius: 0.5, y: 0.5)
-                            }
+                    HStack(spacing: 5) {
+                        Text(label)
+                            .font(.system(size: 11.5, weight: on ? .semibold : .regular))
+                            .foregroundStyle(on ? Color.primary : Color.rbText2)
+                        if let n = counts[option] {
+                            Text("\(n)")
+                                .font(.system(size: 11.5))
+                                .monospacedDigit()
+                                .foregroundStyle(Color.rbText3)
                         }
-                        .contentShape(Rectangle())
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(height: 22)
+                    .background {
+                        if on {
+                            inner.fill(Color.rbSegmentOn)
+                                .shadow(color: .black.opacity(0.14), radius: 0.5, y: 0.5)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(counts[option].map { "\(label), \($0)" } ?? label)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }

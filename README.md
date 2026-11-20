@@ -47,9 +47,15 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
   and the live output.
 - Services outlive Runbar: quitting or updating the app leaves them running, and it picks them up again
   when it opens. Optional restart on crash, health checks, and starting with Runbar (`autostart`).
+- Each service shows what it runs (Next.js, Node, Python, Postgres, Docker…), from its `type`, a proxy's
+  database or the framework in `package.json`. Brand marks from [Simple Icons](https://simpleicons.org) (CC0).
+- Projects with something running come first (`settings.activeProjectsFirst`, on by default, also in ⋯).
+  The order is set when the panel opens, so nothing moves under the pointer.
+- Search stays out of the way until you press ⌘K, click the magnifier or just start typing a name or a port.
 
 **Ports**
 - A taken port says who holds it, with a one-click fix: stop that service, or end that process, and restart.
+  Alerts gather under **Needs you** at the top of the panel, each with its fix beside it.
 - With `autoPort`, a service whose port is taken starts on the next free one.
 - Services started outside Runbar (in Terminal, for example) are recognized by their folder.
 - Ports held by other processes are listed, and the menu bar icon flags alerts.
@@ -70,6 +76,18 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
 - Running services that use the folder are stopped first and started again when it's done.
 - Only known folder names, never a symlink, never outside the project. Generic names like `build`, `dist`
   or `.cache` are never touched.
+
+**Coffee mode**
+- The cup in the header keeps the Mac from sleeping while you're away and an agent is still working,
+  **lid closed included**. Locked isn't asleep: the display still turns off and locks, and everything keeps
+  running. While it's on, a strip in the panel says for how long, with Turn off, and the `>_` in the menu
+  bar turns green.
+- Not sleeping when idle needs nothing special. Not sleeping when the lid closes takes the kernel's
+  `SleepDisabled` switch (`pmset -a disablesleep`), which only root can set: the first time, macOS asks for
+  your password to install `/etc/sudoers.d/runbar`, which allows exactly `pmset -a disablesleep 1` and `0`.
+- That switch also stops the Mac sleeping for low battery or heat, so coffee mode turns itself off at 15%
+  battery or when the Mac gets critically hot, and tells you. If Runbar quits, crashes or is killed, the
+  switch goes back off on its own.
 
 ## Screens
 
@@ -214,6 +232,7 @@ flowchart LR
 | Each service's state, re-adoption, automatic restart | `Sources/RunbarApp/ServiceRuntime.swift` |
 | App model, monitoring every 2 s, conflict detection | `Sources/RunbarApp/AppModel.swift`, `Display.swift` |
 | Menu bar icon and panel (drawn by the app, pinned under the icon) | `Sources/RunbarApp/StatusPanel.swift` |
+| Coffee mode: the assertion against idle sleep, the lid switch, and the battery and heat checks | `Sources/RunbarApp/KeepAwake.swift`, `LidSleep.swift` |
 | UI | `PopoverView.swift`, `ServiceDetailView.swift`, `DiskView.swift`, `AgentView.swift`, `Components.swift`, `Theme.swift` |
 
 SwiftUI's `@State` became a macro in the macOS 27 SDK and its plugin only ships with Xcode, so the views use
@@ -246,8 +265,8 @@ glass, light and dark) and the agent window to PNGs with your real data, without
 touching any service.
 
 To uninstall: quit Runbar, delete `~/Applications/Runbar.app` and the `runbar` link (in `/opt/homebrew/bin`,
-`/usr/local/bin` or `~/.local/bin`). The configuration lives in `~/.config/runbar`, the logs in
-`~/Library/Logs/Runbar`.
+`/usr/local/bin` or `~/.local/bin`), and `sudo rm /etc/sudoers.d/runbar` if coffee mode installed it. The
+configuration lives in `~/.config/runbar`, the logs in `~/Library/Logs/Runbar`.
 
 </details>
 

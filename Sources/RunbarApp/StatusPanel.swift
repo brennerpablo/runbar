@@ -28,7 +28,99 @@ final class StatusBarController: NSObject {
         observe()
     }
 
-    @objc private func clicked() { panel.toggle() }
+    /// Left click: the panel. Right click or control-click: the options menu.
+    @objc private func clicked() {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseDown || event?.modifierFlags.contains(.control) == true {
+            showOptions()
+        } else {
+            panel.toggle()
+        }
+    }
+
+    /// The panel's ⋯ menu, from the icon, without opening the panel.
+    private func showOptions() {
+        guard let item, let button = item.button else { return }
+        panel.close()
+        panel.forgetIconClick()
+        item.menu = optionsMenu()
+        // With a menu set, the click opens it, placed and highlighted like any menu bar item.
+        button.performClick(nil)
+        item.menu = nil
+    }
+
+    /// Keep in step with `PopoverView.moreMenu`.
+    private func optionsMenu() -> NSMenu {
+        let model = AppModel.shared
+        let configOK = model.configError == nil
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        func add(_ title: String, _ action: Selector, key: String = "", on: Bool? = nil, enabled: Bool = true) {
+            let entry = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            entry.target = self
+            if let on { entry.state = on ? .on : .off }
+            entry.isEnabled = enabled
+            menu.addItem(entry)
+        }
+        add("Refresh", #selector(refresh), key: "r")
+        menu.addItem(.separator())
+        add("Open config.json", #selector(openConfig))
+        add("Set up with an agent…", #selector(setUpWithAgent))
+        menu.addItem(.separator())
+        let look = NSMenuItem(title: "Look", action: nil, keyEquivalent: "")
+        let looks = NSMenu()
+        for (title, value) in [("Automatic", LookSetting.auto), ("Solid", .solid), ("Liquid Glass", .glass)] {
+            let entry = NSMenuItem(title: title, action: #selector(setLook(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = value.rawValue
+            entry.state = model.config.settings.look == value ? .on : .off
+            looks.addItem(entry)
+        }
+        look.submenu = looks
+        look.isEnabled = configOK
+        menu.addItem(look)
+        add("Open at login", #selector(toggleOpenAtLogin), on: model.launchAtLogin)
+        add("Active projects first", #selector(toggleActiveFirst), on: model.config.settings.activeProjectsFirst, enabled: configOK)
+        menu.addItem(.separator())
+        add("Install the runbar command", #selector(installCLI))
+        add("Show config folder", #selector(showConfigFolder))
+        add("Open logs folder", #selector(openLogs))
+        menu.addItem(.separator())
+        add("Quit and keep services running", #selector(quitKeeping))
+        add("Quit and stop services", #selector(quitStopping))
+        return menu
+    }
+
+    @objc private func refresh() { AppModel.shared.refresh() }
+    @objc private func openConfig() { AppModel.shared.openConfigFile() }
+    @objc private func installCLI() { _ = AppModel.shared.installCLI() }
+    @objc private func showConfigFolder() { AppModel.shared.revealConfigDir() }
+    @objc private func openLogs() { AppModel.shared.openLogsDir() }
+    @objc private func quitKeeping() { AppModel.shared.quit(stopServices: false) }
+    @objc private func quitStopping() { AppModel.shared.quit(stopServices: true) }
+
+    @objc private func toggleOpenAtLogin() {
+        let model = AppModel.shared
+        model.setLaunchAtLogin(!model.launchAtLogin)
+    }
+
+    @objc private func toggleActiveFirst() {
+        let model = AppModel.shared
+        model.setActiveProjectsFirst(!model.config.settings.activeProjectsFirst)
+    }
+
+    @objc private func setLook(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let look = LookSetting(rawValue: raw) else { return }
+        AppModel.shared.setLook(look)
+    }
+
+    /// The agent window opens through SwiftUI's `openWindow`, which the panel's view holds. Before the
+    /// panel has ever opened that view doesn't exist yet, so it opens first.
+    @objc private func setUpWithAgent() {
+        if let open = PanelEvents.shared.openAgent { return open() }
+        panel.open()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { PanelEvents.shared.openAgent?() }
+    }
 
     /// Redraws the icon and count whenever anything they show changes.
     private func observe() {
@@ -41,13 +133,29 @@ final class StatusBarController: NSObject {
         let model = AppModel.shared
         let badge: MenuBarIcon.Badge = model.alertCount > 0 ? .alert : (model.isBusy ? .busy : .none)
         let count = model.runningCount
+        let awake = KeepAwake.shared.isOn
         guard let button = item?.button else { return }
-        button.image = MenuBarIcon.image(badge)
+        button.image = MenuBarIcon.image(badge, awake: awake)
         button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
         button.title = count > 0 ? "\(count)" : ""
         button.imagePosition = count > 0 ? .imageLeading : .imageOnly
-        button.setAccessibilityLabel(count == 1 ? "Runbar, 1 service running" : "Runbar, \(count) services running")
+        let label = count == 1 ? "Runbar, 1 service running" : "Runbar, \(count) services running"
+        button.setAccessibilityLabel(awake ? "\(label), keeping the Mac awake" : label)
     }
+}
+
+/// What the panel's view handles from the window: Esc closes search before the panel, typing with
+/// nothing focused opens search, and each open lets the list settle its project order.
+@MainActor
+final class PanelEvents {
+    static let shared = PanelEvents()
+    /// True when the view used the Esc.
+    var escape: (() -> Bool)?
+    /// Text typed while no field has focus; true when the view took it.
+    var typed: ((String) -> Bool)?
+    var opened: (() -> Void)?
+    /// Opens the agent window (SwiftUI's `openWindow` lives in the view).
+    var openAgent: (() -> Void)?
 }
 
 @MainActor
@@ -68,6 +176,10 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// Uptime when a click on the icon closed the panel before the icon's action arrived (see `dismiss`).
     private var closedByIconClick: TimeInterval?
 
+    /// A right click on the icon shows the options menu: the close that click caused mustn't swallow the
+    /// next left click.
+    func forgetIconClick() { closedByIconClick = nil }
+
     func toggle() {
         if isOpen { return close(restoreFocus: true) }
         // The panel already closed on this click: leave it closed.
@@ -82,6 +194,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         closedByIconClick = nil
         let panel = self.panel ?? makePanel()
         self.panel = panel
+        PanelEvents.shared.opened?()
         DiskModel.shared.refreshFreeSpace()
         place(panel)
         // With the app active, no other app takes focus from the panel while it is open.
@@ -216,6 +329,19 @@ final class RunbarPanel: NSPanel {
     }
 
     override func cancelOperation(_ sender: Any?) {
+        if PanelEvents.shared.escape?() == true { return }
         (delegate as? PanelController)?.close(restoreFocus: true)
+    }
+
+    /// Typing a name or a port with nothing focused starts a search.
+    override func keyDown(with event: NSEvent) {
+        let typing = CharacterSet.alphanumerics.union(.punctuationCharacters).union(.symbols)
+        if event.modifierFlags.intersection([.command, .control, .option, .function]).isEmpty,
+           let text = event.characters, !text.isEmpty,
+           text.unicodeScalars.allSatisfy({ typing.contains($0) }),
+           PanelEvents.shared.typed?(text) == true {
+            return
+        }
+        super.keyDown(with: event)
     }
 }

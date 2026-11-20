@@ -19,10 +19,14 @@ struct PopoverView: View {
     var initialImport: Listener?
     @ViewState private var tab: PanelTab = .services
     @ViewState private var query = ""
+    /// Search is closed until ⌘K, the magnifier or typing opens it in place of the header.
+    @ViewState private var searching = false
     @ViewState private var filter: StatusFilter = .all
     @ViewState private var expanded: Set<String> = []
     @ViewState private var expandedReady = false
     @ViewState private var showOthers = false
+    /// Project order, set each time the panel opens: a project that starts or stops doesn't move under the pointer.
+    @ViewState private var order: [String] = []
     /// The port held outside Runbar being moved into it (its listener).
     @ViewState private var importing: Listener?
     @FocusState private var searchFocused: Bool
@@ -46,30 +50,42 @@ struct PopoverView: View {
         .environment(\.theme, theme)
         .onAppear {
             prepareExpanded()
+            settleOrder()
+            listenToPanel()
             if selected == nil, let initialSelection { selected = initialSelection }
             if let initialTab { tab = initialTab }
-            if let initialQuery { query = initialQuery }
+            if let initialQuery {
+                query = initialQuery
+                searching = true
+            }
             if initialShowOthers { showOthers = true }
             if let initialImport { importing = initialImport }
         }
+        .onChange(of: model.config.settings.activeProjectsFirst) { settleOrder() }
     }
 
     // MARK: - List
 
     private func list(_ t: Theme) -> some View {
         let alerts = model.alertingServices
+        let awake = KeepAwake.shared
         return VStack(spacing: 0) {
             header(t)
-                .padding(.leading, t.gutter)
-                .padding(.trailing, t.gutter - 4)
-                .padding(.top, 14)
-            tiles(t)
                 .padding(.horizontal, t.gutter)
                 .padding(.top, 12)
-            if let first = alerts.first {
-                alertStrip(first, count: alerts.count, t)
+            if awake.isOn {
+                coffeeStrip(awake, t)
                     .padding(.horizontal, t.gutter)
                     .padding(.top, 10)
+            }
+            tiles(t)
+                .padding(.horizontal, t.gutter)
+                .padding(.top, 10)
+            // While searching, the matches matter more; the rows still show who has an alert.
+            if tab == .services && !alerts.isEmpty && trimmedQuery.isEmpty {
+                needsYou(alerts, t)
+                    .padding(.horizontal, t.gutter)
+                    .padding(.top, 12)
             }
             if let issue = model.configError {
                 Banner(
@@ -93,71 +109,63 @@ struct PopoverView: View {
                 .padding(.horizontal, t.gutter)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
-                ZStack(alignment: .bottom) {
-                    AdaptiveScroll(maxHeight: listMaxHeight(alerts: !alerts.isEmpty), holdHeight: isFiltering) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if tab == .services {
-                                groupsList(t)
-                                if !model.otherListeners.isEmpty { othersSection(t) }
-                            } else {
-                                DiskPanel(query: query)
-                            }
+                AdaptiveScroll(maxHeight: listMaxHeight(alerts: tab == .services && trimmedQuery.isEmpty ? alerts.count : 0), holdHeight: isFiltering) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if tab == .services {
+                            groupsList(t)
+                            if !model.otherListeners.isEmpty { othersSection(t) }
+                        } else {
+                            DiskPanel(query: query)
                         }
-                        .padding(.horizontal, t.gutter)
-                        // Room for the last row to scroll above the floating search.
-                        .padding(.bottom, Layout.searchHeight + 24)
                     }
-                    LinearGradient(
-                        stops: [
-                            .init(color: t.panelFade.opacity(0), location: 0),
-                            .init(color: t.panelFade.opacity(0.9), location: 0.6),
-                            .init(color: t.panelFade.opacity(0.96), location: 1),
-                        ],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                    .frame(height: Layout.searchHeight + 36)
-                    .allowsHitTesting(false)
-                    searchBar(t)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 12)
+                    .padding(.horizontal, t.gutter)
+                    .padding(.bottom, t.gutter)
                 }
             }
         }
     }
 
-    /// The panel stays within a laptop's height: notices at the top take space from the list.
-    private func listMaxHeight(alerts: Bool) -> CGFloat {
-        500 - (alerts ? 44 : 0) - (model.configError == nil ? 0 : 96)
+    /// The panel stays within a laptop's height: what sits above the list takes space from it.
+    private func listMaxHeight(alerts: Int) -> CGFloat {
+        var height: CGFloat = 500
+        if KeepAwake.shared.isOn { height -= 42 }
+        if alerts > 0 { height -= 40 + 51 * CGFloat(alerts) }
+        if model.configError != nil { height -= 106 }
+        return max(height, 160)
     }
 
+    // MARK: - Header
+
     private func header(_ t: Theme) -> some View {
-        let running = model.runningCount
-        let proxies = model.openProxyCount
+        Group {
+            if searching { searchField(t) } else { titleBar(t) }
+        }
+        .frame(height: 32)
+        .background {
+            // Shortcuts without visible buttons.
+            Group {
+                Button("Search") { openSearch() }
+                    .keyboardShortcut("k", modifiers: .command)
+                Button("Refresh") { model.refresh() }
+                    .keyboardShortcut("r", modifiers: .command)
+            }
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func titleBar(_ t: Theme) -> some View {
+        let awake = KeepAwake.shared
         return HStack(alignment: .center, spacing: 10) {
-            AppMark()
-            Text("Runbar")
-                .font(.system(size: 15, weight: .semibold))
+            AppLogo()
             Spacer(minLength: 8)
             HStack(spacing: 2) {
-                if running + proxies > 0 {
-                    Button { model.stopAllServices() } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 8, weight: .bold))
-                            Text("Stop all")
-                        }
-                    }
-                    .rbButton(t)
-                    .controlSize(.small)
-                    .fixedSize()
-                    .padding(.trailing, 6)
-                    .help(stopAllHelp(running: running, proxies: proxies))
-                    .accessibilityLabel("Stop all running services")
-                }
-                Button { model.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                // While it's on, the strip below the header is the state and the off switch.
+                if !awake.isOn { coffeeButton(awake) }
+                Button { openSearch() } label: { Image(systemName: "magnifyingglass") }
                     .buttonStyle(IconButtonStyle())
-                    .help("Reload config.json and refresh")
-                    .accessibilityLabel("Refresh")
+                    .help("Search (⌘K, or just start typing)")
+                    .accessibilityLabel("Search")
                 Menu {
                     Button("Ask an agent…") { openAgentWindow() }
                     Button("Edit config.json") { model.openConfigFile() }
@@ -172,9 +180,104 @@ struct PopoverView: View {
                 .accessibilityLabel("Add service")
                 moreMenu
             }
+            .padding(.trailing, -4)
         }
-        .frame(height: Layout.control)
     }
+
+    /// Search in place of the header. Return opens the first match, Esc gives the header back.
+    private func searchField(_ t: Theme) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let matches = tab == .services && !trimmedQuery.isEmpty ? matchCount : nil
+        return HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.rbText2)
+            TextField(searchPrompt, text: $query, prompt: Text(searchPrompt).foregroundStyle(Color.rbText3))
+                .textFieldStyle(.plain)
+                .font(.system(size: 13.5))
+                .focused($searchFocused)
+                .onSubmit(openFirstMatch)
+                .onExitCommand(perform: closeSearch)
+                .onAppear(perform: focusSearch)
+            if let matches {
+                Text(matches == 1 ? "1 match" : "\(matches) matches")
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.rbText3)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            Button(action: closeSearch) {
+                Text("esc")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.rbText2)
+                    .padding(.horizontal, 7)
+                    .frame(height: 22)
+                    .background(Color.rbControl, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Close search (Esc)")
+            .accessibilityLabel("Close search")
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 5)
+        .frame(height: 32)
+        .background(Color.rbSearchField, in: shape)
+        .overlay(shape.strokeBorder(searchFocused ? Color.rbLiveFill.opacity(0.55) : Color.rbCardBorder, lineWidth: 1))
+    }
+
+    private var searchPrompt: String { tab == .services ? "Search services, proxies or ports" : "Filter projects or folders" }
+
+    private func openSearch() {
+        if !searching { searching = true }
+        focusSearch()
+    }
+
+    /// Focusing a field selects its text; the cursor goes to the end so typing carries on.
+    private func focusSearch() {
+        DispatchQueue.main.async {
+            searchFocused = true
+            DispatchQueue.main.async {
+                (NSApp.keyWindow?.firstResponder as? NSTextView)?.moveToEndOfDocument(nil)
+            }
+        }
+    }
+
+    private func closeSearch() {
+        query = ""
+        searching = false
+        searchFocused = false
+    }
+
+    private func openFirstMatch() {
+        guard tab == .services, !trimmedQuery.isEmpty,
+              let first = orderedGroups().flatMap(\.runtimes).first(where: visible) else { return }
+        selected = first.id
+    }
+
+    /// Esc, typing and opening reach the view through the panel.
+    private func listenToPanel() {
+        let events = PanelEvents.shared
+        events.escape = {
+            guard searching, selected == nil, importing == nil else { return false }
+            closeSearch()
+            return true
+        }
+        events.typed = { text in
+            guard selected == nil, importing == nil else { return false }
+            query += text
+            openSearch()
+            return true
+        }
+        events.opened = {
+            if searching { closeSearch() }
+            settleOrder()
+        }
+        events.openAgent = { openAgentWindow() }
+    }
+
+    // MARK: - Menus and coffee mode
 
     private func stopAllHelp(running: Int, proxies: Int) -> String {
         var parts: [String] = []
@@ -183,9 +286,78 @@ struct PopoverView: View {
         return "Stop " + parts.joined(separator: " and ")
     }
 
-    /// Everything that used to live in the footer: config, look, folders and quit.
+    /// Coffee mode keeps the Mac from sleeping while you're away and agents keep working (see `KeepAwake`).
+    private func coffeeButton(_ awake: KeepAwake) -> some View {
+        Button { awake.toggle() } label: { Image(systemName: "cup.and.saucer") }
+            .buttonStyle(IconButtonStyle())
+            .help(coffeeHelp(awake))
+            .accessibilityLabel("Coffee mode")
+            .accessibilityValue("Off")
+            .accessibilityAddTraits(.isToggle)
+    }
+
+    /// While coffee mode is on: what it covers, for how long, and the way to turn it off.
+    private func coffeeStrip(_ awake: KeepAwake, _ t: Theme) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        // `model.now` ticks every 2 s and redraws this; the wall clock keeps it exact.
+        let elapsed = awake.since.map { Format.duration(max(model.now, Date()).timeIntervalSince($0)) } ?? ""
+        // How long first: it's what changes. The lid's state only when there is a lid.
+        let lid: String
+        switch awake.lid {
+        case .none: lid = ""
+        case .asking: lid = LidSleep.grantInstalled ? " · covering the lid…" : " · waiting for your password"
+        case .covered: lid = " · lid closed too"
+        case .uncovered: lid = " · closing the lid still sleeps"
+        }
+        return HStack(spacing: 8) {
+            Image(systemName: "cup.and.heat.waves.fill")
+                .font(.system(size: 11.5, weight: .semibold))
+            Text("\(Text("Coffee mode").fontWeight(.semibold)) · \(elapsed)\(lid)")
+                .font(.system(size: 12))
+                .monospacedDigit()
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 4)
+            Button("Turn off") { awake.toggle() }
+                .buttonStyle(TextButtonStyle(accent: true, size: 11.5))
+                .accessibilityLabel("Turn coffee mode off")
+        }
+        .foregroundStyle(Color.rbLive)
+        .padding(.leading, 10)
+        .padding(.trailing, 2)
+        .frame(height: 32)
+        .background(Color.rbLiveSoft, in: shape)
+        .help(coffeeHelp(awake))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func coffeeHelp(_ awake: KeepAwake) -> String {
+        guard let since = awake.since else {
+            let what = LidSleep.hasLid
+                ? "Coffee mode: keep the Mac awake while you're away, lid closed too. The display still turns off and locks."
+                : "Coffee mode: keep the Mac awake while you're away. The display still turns off and locks."
+            return awake.stopReason.map { "Turned itself off: \($0). \(what)" } ?? what
+        }
+        let base = "Keeping the Mac awake since \(Format.clock(since))"
+        switch awake.lid {
+        case .none:
+            return "\(base)."
+        case .asking:
+            return LidSleep.grantInstalled ? "\(base). Turning lid-close sleep off…" : "\(base). Waiting for your password to cover closing the lid too."
+        case .covered:
+            return "\(base), lid closed too. On battery it stops at \(KeepAwake.batteryFloor)%."
+        case .uncovered:
+            return "\(base), but closing the lid will still put it to sleep. Turn it off and on to try again."
+        }
+    }
+
+    /// Everything that used to live in the footer: refresh, config, look, folders and quit. A right click on
+    /// the menu bar icon shows the same options (`StatusBarController.optionsMenu`).
     private var moreMenu: some View {
         Menu {
+            Button("Refresh") { model.refresh() }
+                .keyboardShortcut("r", modifiers: .command)
+            Divider()
             Button("Open config.json") { model.openConfigFile() }
             Button("Set up with an agent…") { openAgentWindow() }
             Divider()
@@ -196,6 +368,11 @@ struct PopoverView: View {
             }
             .disabled(model.configError != nil)
             Toggle("Open at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
+            Toggle("Active projects first", isOn: Binding(
+                get: { model.config.settings.activeProjectsFirst },
+                set: { model.setActiveProjectsFirst($0) }
+            ))
+            .disabled(model.configError != nil)
             Divider()
             Button("Install the runbar command") { _ = model.installCLI() }
             Button("Show config folder") { model.revealConfigDir() }
@@ -214,31 +391,28 @@ struct PopoverView: View {
         .accessibilityLabel("More options")
     }
 
-    /// Running and Disk are also the tabs: the raised one is the view below.
+    // MARK: - Tiles
+
+    /// Services and Disk are also the tabs: the raised one is the view below.
     private func tiles(_ t: Theme) -> some View {
         let running = model.runningCount
         let proxies = model.openProxyCount
-        let memory = Format.memory(model.totalMemory).split(separator: " ").map(String.init)
+        let live = running + proxies > 0
         let disk = DiskModel.shared
         let diskSize = Format.memory(disk.total).split(separator: " ").map(String.init)
         return HStack(spacing: 8) {
             Button { show(.services) } label: {
-                // Open proxies show as a green "+1 proxy" in place of the live dot (there's no room for both).
-                StatTile(label: "Running", value: "\(running)", raised: tab == .services, live: running > 0 && proxies == 0,
-                         note: proxies > 0 ? "+\(proxies) \(proxies == 1 ? "proxy" : "proxies")" : nil, noteColor: .rbLive) {
-                    Text("of \(model.serviceCount)")
-                        .font(.system(size: 11.5))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.rbText2)
+                StatTile(label: "Services", value: "\(running)", unit: "of \(model.serviceCount)",
+                         accent: proxies > 0 ? "+\(proxies) \(proxies == 1 ? "proxy" : "proxies")" : nil,
+                         raised: tab == .services,
+                         note: live ? "\(Format.memory(model.totalMemory)) · \(Int(model.totalCPU.rounded()))% CPU" : nil) {
+                    MiniBars(values: Metrics.buckets(model.totalHistory(\.memHistory), count: 7).map(\.value), floorAtZero: false, height: 14)
                 }
             }
             .buttonStyle(.plain)
+            .help("Memory and CPU of everything running")
             .accessibilityAddTraits(tab == .services ? .isSelected : [])
             .accessibilityHint("Show services")
-            StatTile(label: "Memory", value: running > 0 ? (memory.first ?? "—") : "—", unit: running > 0 ? memory.dropFirst().first : nil,
-                     note: running > 0 ? "\(Int(model.totalCPU.rounded()))% CPU" : nil) {
-                MiniBars(values: Metrics.buckets(model.totalHistory(\.memHistory), count: 7).map(\.value), floorAtZero: false)
-            }
             Button { show(.disk) } label: {
                 StatTile(label: "Disk", value: disk.hasMeasured ? (diskSize.first ?? "—") : "—", unit: disk.hasMeasured ? diskSize.dropFirst().first : nil,
                          raised: tab == .disk, note: disk.freeBytes.map { "\(DiskText.roundedSize($0)) free" },
@@ -254,7 +428,7 @@ struct PopoverView: View {
 
     private func show(_ next: PanelTab) {
         guard tab != next else { return }
-        query = ""
+        closeSearch()
         tab = next
         if next == .disk { DiskModel.shared.scanIfStale() }
     }
@@ -287,134 +461,130 @@ struct PopoverView: View {
         .frame(height: 26)
     }
 
-    /// One line for the first alert; clicking it opens the service.
-    private func alertStrip(_ rt: ServiceRuntime, count: Int, _ t: Theme) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
-        let title = count == 1 ? "1 alert" : "\(count) alerts"
-        let d = model.display(rt)
-        return HStack(spacing: 0) {
-            Button { selected = rt.id } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 11.5, weight: .semibold))
-                    Text("\(Text(title).fontWeight(.semibold)) · \(rt.id): \(d.subtitle)")
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
+    // MARK: - Needs you
+
+    /// Services with an alert, each with what's wrong and the fix one click away.
+    private func needsYou(_ alerts: [ServiceRuntime], _ t: Theme) -> some View {
+        let shape = RoundedRectangle(cornerRadius: t.cardRadius, style: .continuous)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Needs you")
+                    .font(.system(size: 12.5, weight: .semibold))
+                Text("\(alerts.count)")
+                    .font(.system(size: 12.5))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.rbText3)
+            }
+            .foregroundStyle(Color.rbWarn)
+            .padding(.leading, 2)
+            .frame(height: 22)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            VStack(spacing: 0) {
+                ForEach(Array(alerts.enumerated()), id: \.element.id) { index, rt in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(Color.rbWarnBorder)
+                            .frame(height: 1)
+                            .padding(.leading, 46)
+                    }
+                    NeedsYouRow(runtime: rt) { selected = rt.id }
                 }
-                .padding(.leading, 11)
-                .padding(.trailing, 8)
-                .frame(height: 34)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(title). \(rt.id): \(d.subtitle)")
-            .accessibilityHint("Open details")
-            Rectangle()
-                .fill(Color.rbWarnBorder)
-                .frame(width: 1, height: 18)
-            Button {
-                withAnimation(.snappy(duration: 0.2)) { model.dismissAlert(rt.id) }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9.5, weight: .bold))
-                    .frame(width: 34, height: 34)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(DismissText.help(rt))
-            .accessibilityLabel("Dismiss the alert for \(rt.id)")
+            .background(Color.rbWarnSoft, in: shape)
+            .overlay(shape.strokeBorder(Color.rbWarnBorder))
         }
-        .foregroundStyle(Color.rbWarn)
-        .background(Color.rbWarnSoft, in: shape)
-        .overlay(shape.strokeBorder(Color.rbWarnBorder))
     }
+
+    // MARK: - Filter and list
 
     private func listHeader(_ t: Theme) -> some View {
-        let services = model.groups.reduce(0) { $0 + $1.services.count }
-        let proxies = model.groups.reduce(0) { $0 + $1.proxies.count }
+        let running = model.runningCount
+        let proxies = model.openProxyCount
         return HStack(alignment: .center, spacing: 6) {
-            Text("Services")
-                .font(.system(size: 12.5, weight: .semibold))
-            Text(proxies == 0 ? "\(services)" : "\(services) · \(proxies) \(proxies == 1 ? "proxy" : "proxies")")
-                .font(.system(size: 12.5))
-                .monospacedDigit()
-                .foregroundStyle(Color.rbText3)
-                .lineLimit(1)
+            SegmentedFilter(selection: $filter, counts: statusCounts()).fixedSize()
             Spacer(minLength: 8)
-            SegmentedFilter(selection: $filter).fixedSize()
-        }
-        .padding(.leading, 2)
-    }
-
-    /// Floating search over the end of the list. ⌘K moves the cursor into it.
-    private func searchBar(_ t: Theme) -> some View {
-        let shape = RoundedRectangle(cornerRadius: t.cardRadius, style: .continuous)
-        return HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.rbText2)
-            TextField(searchPrompt, text: $query, prompt: Text(searchPrompt).foregroundStyle(Color.rbText3))
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .focused($searchFocused)
-            if query.isEmpty {
-                Text("⌘K")
-                    .font(.system(size: 11, weight: .medium))
-                    .tracking(0.4)
-                    .foregroundStyle(Color.rbText2)
-                    .padding(.horizontal, 7)
-                    .frame(height: 22)
-                    .background(Color.rbControl, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .accessibilityHidden(true)
-            } else {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Color.rbText3)
+            if running + proxies > 0 {
+                Button { model.stopAllServices() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 7.5, weight: .bold))
+                        Text("Stop all")
+                    }
                 }
-                .buttonStyle(.plain)
-                .frame(width: 22, height: 22)
-                .accessibilityLabel("Clear search")
+                .buttonStyle(TextButtonStyle(size: 11.5))
+                .padding(.trailing, -6)
+                .help(stopAllHelp(running: running, proxies: proxies))
+                .accessibilityLabel("Stop all running services")
             }
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
-        .frame(height: Layout.searchHeight)
-        .background(Color.rbSearchField, in: shape)
-        .overlay(shape.strokeBorder(Color.rbCardBorder, lineWidth: 1))
-        .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
-        .background {
-            // Shortcut without a visible button.
-            Button("Search") { searchFocused = true }
-                .keyboardShortcut("k", modifiers: .command)
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
     }
 
-    private var searchPrompt: String { tab == .services ? "Search services, proxies or ports" : "Filter projects or folders" }
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces).lowercased() }
 
-    private var isFiltering: Bool { filter != .all || !query.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var isFiltering: Bool { filter != .all || !trimmedQuery.isEmpty }
 
-    private func visible(_ rt: ServiceRuntime) -> Bool {
-        switch filter {
-        case .running where !rt.isRunningAnywhere: return false
-        case .stopped where rt.isRunningAnywhere: return false
-        default: break
-        }
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+    private func matchesQuery(_ rt: ServiceRuntime) -> Bool {
+        let q = trimmedQuery
         guard !q.isEmpty else { return true }
         let ports = ([rt.config.port].compactMap { $0 } + rt.listening + (rt.external?.ports ?? [])).map(String.init).joined(separator: " ")
         let tool = rt.config.isProxy ? rt.config.proxyTool.label : ""
-        let hay = "\(rt.id) \(rt.config.command) \(rt.config.type.label) \(tool) \(rt.config.projectName) \(ports)".lowercased()
+        let kind = ServiceKind.of(rt.config).label
+        let hay = "\(rt.id) \(rt.config.command) \(rt.config.type.label) \(kind) \(tool) \(rt.config.projectName) \(ports)".lowercased()
         return hay.contains(q)
+    }
+
+    private func matchesFilter(_ rt: ServiceRuntime) -> Bool {
+        switch filter {
+        case .all: return true
+        case .running: return rt.isRunningAnywhere
+        case .stopped: return !rt.isRunningAnywhere
+        }
+    }
+
+    private func visible(_ rt: ServiceRuntime) -> Bool { matchesQuery(rt) && matchesFilter(rt) }
+
+    /// How many rows each filter would show, within the search.
+    private func statusCounts() -> [StatusFilter: Int] {
+        let rows = model.groups.flatMap(\.runtimes).filter(matchesQuery)
+        let running = rows.filter(\.isRunningAnywhere).count
+        return [.all: rows.count, .running: running, .stopped: rows.count - running]
+    }
+
+    /// Services and ports outside Runbar that match the search.
+    private var matchCount: Int {
+        let q = trimmedQuery
+        let others = model.otherListeners.filter { "\($0.port) \($0.name)".lowercased().contains(q) }.count
+        return model.groups.flatMap(\.runtimes).filter(matchesQuery).count + others
+    }
+
+    /// Projects with something running first (when the setting is on), in the order taken when the panel
+    /// opened. Projects added since then go after, in config.json's order.
+    private func orderedGroups() -> [ServiceGroup] {
+        let groups = model.groups
+        guard model.config.settings.activeProjectsFirst, !order.isEmpty else { return groups }
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return groups.enumerated()
+            .sorted { a, b in
+                let ra = rank[a.element.id] ?? Int.max, rb = rank[b.element.id] ?? Int.max
+                return ra != rb ? ra < rb : a.offset < b.offset
+            }
+            .map(\.element)
+    }
+
+    private func settleOrder() {
+        let groups = model.groups.filter { !$0.isOrphanGroup }
+        let active = groups.filter { $0.runtimes.contains(where: \.isRunningAnywhere) }
+        let rest = groups.filter { !$0.runtimes.contains(where: \.isRunningAnywhere) }
+        // Services no longer in config.json stay last.
+        order = (active + rest).map(\.id) + [AppModel.orphanGroupID]
     }
 
     @ViewBuilder
     private func groupsList(_ t: Theme) -> some View {
-        let groups = model.groups
+        let groups = orderedGroups()
         ForEach(groups) { group in
             let rows = group.runtimes.filter(visible)
             if !(isFiltering && rows.isEmpty) {
@@ -442,7 +612,7 @@ struct PopoverView: View {
 
     private func emptyState(_ t: Theme) -> some View {
         VStack(spacing: 8) {
-            AppMark(size: 40)
+            AppMark(size: 36)
                 .padding(.bottom, 4)
             Text("No services configured")
                 .font(.system(size: 13.5, weight: .semibold))
@@ -577,6 +747,91 @@ struct PopoverView: View {
     }
 }
 
+// MARK: - Needs you
+
+/// One alert: what runs, what's wrong in a line, the fix, and dismiss. The row opens the service.
+private struct NeedsYouRow: View {
+    @Environment(AppModel.self) private var model
+    let runtime: ServiceRuntime
+    let open: () -> Void
+
+    var body: some View {
+        let d = model.display(runtime)
+        HStack(spacing: 10) {
+            Button(action: open) {
+                HStack(spacing: 10) {
+                    ServiceIcon(config: runtime.config, dot: d.dot, size: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(runtime.id)
+                                .font(.system(size: 13, weight: .semibold))
+                                .lineLimit(1)
+                            Text(runtime.config.projectName)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.rbText3)
+                                .lineLimit(1)
+                        }
+                        Text(d.alertLine)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Color.rbTextDim)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(d.banner ?? d.alertLine)
+            .accessibilityLabel("\(runtime.id), \(d.statusLabel): \(d.alertLine)")
+            .accessibilityHint("Open details")
+
+            if let fix = primary(d) {
+                Button(fix.label, action: fix.action)
+                    .buttonStyle(RBButtonStyle(prominent: true, warn: true))
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help(fix.help)
+            }
+            Button {
+                withAnimation(.snappy(duration: 0.2)) { model.dismissAlert(runtime.id) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(Color.rbText2)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(DismissText.help(runtime))
+            .accessibilityLabel("Dismiss the alert for \(runtime.id)")
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 6)
+        .frame(minHeight: 50)
+    }
+
+    /// The fix in a word or two; the tooltip says it in full.
+    private func primary(_ d: ServiceDisplay) -> (label: String, help: String, action: () -> Void)? {
+        if let fix = d.fix, let full = d.fixLabel {
+            let label: String
+            switch fix {
+            case .stopService, .killProcess, .turnOffLaunchd:
+                label = (runtime.expectedPort ?? runtime.config.port).map { "Free :\($0)" } ?? "Fix"
+            case .signIn: label = "Sign in"
+            case .takeOverExternal: label = "Take over"
+            case .openNeeds: label = "Open needs"
+            }
+            return (label, full, { model.perform(fix, for: runtime) })
+        }
+        if d.action == .retry {
+            let help = d.isProxy ? "Try opening \(runtime.id) again" : "Try starting \(runtime.id) again"
+            return ("Try again", help, { model.toggle(runtime.id) })
+        }
+        return ("Details", "Open \(runtime.id)", open)
+    }
+}
+
 // MARK: - Project
 
 /// One card per project: a header with a dot per service and, when open, the rows.
@@ -594,8 +849,8 @@ private struct GroupSection: View {
         let counted = group.services.isEmpty ? group.runtimes : group.services
         let alive = counted.filter(\.isRunningAnywhere).count
         let allOn = alive == counted.count && alive > 0
-        let serviceRows = rows.filter { !$0.config.isProxy }
-        let proxyRows = rows.filter { $0.config.isProxy }
+        // Services first, then proxies; each proxy says so in its row.
+        let ordered = rows.filter { !$0.config.isProxy } + rows.filter { $0.config.isProxy }
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Button(action: toggle) {
@@ -609,7 +864,7 @@ private struct GroupSection: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 8)
-                    .frame(height: 30)
+                    .frame(height: 28)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -625,50 +880,31 @@ private struct GroupSection: View {
             }
             .padding(.leading, 4)
             .padding(.trailing, 5)
-            .frame(height: 38)
+            .frame(height: 34)
 
-            if isExpanded && !serviceRows.isEmpty {
-                rowList(serviceRows)
-            }
-            if isExpanded && !proxyRows.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 9.5, weight: .semibold))
-                    Text("Proxies")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundStyle(Color.rbText3)
-                .padding(.horizontal, Layout.rowInset)
-                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
-                .overlay(alignment: .top) {
-                    if !serviceRows.isEmpty {
-                        Rectangle().fill(Color.rbHairline).frame(height: 1).padding(.horizontal, Layout.rowInset)
+            if isExpanded && !ordered.isEmpty {
+                ForEach(Array(ordered.enumerated()), id: \.element.id) { index, rt in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(Color.rbHairline)
+                            .frame(height: 1)
+                            .padding(.leading, ServiceRow.inset + Layout.icon + 10)
                     }
+                    ServiceRow(runtime: rt) { open(rt.id) }
                 }
-                .accessibilityAddTraits(.isHeader)
-                rowList(proxyRows)
+                .padding(.bottom, 2)
             }
         }
         .rbCard(theme)
-    }
-
-    @ViewBuilder
-    private func rowList(_ list: [ServiceRuntime]) -> some View {
-        ForEach(Array(list.enumerated()), id: \.element.id) { index, rt in
-            if index > 0 {
-                Rectangle()
-                    .fill(Color.rbHairline)
-                    .frame(height: 1)
-                    .padding(.leading, Layout.rowInset + Layout.dot + Layout.dotGap)
-            }
-            ServiceRow(runtime: rt) { open(rt.id) }
-        }
     }
 }
 
 // MARK: - Service row
 
+/// One line: what it runs, the name, memory (or connections), the port and the action. A second line only
+/// when there's something to say that "Needs you" doesn't (waiting, a port in use).
 private struct ServiceRow: View {
+    static let inset: CGFloat = 10
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
     let runtime: ServiceRuntime
@@ -678,20 +914,27 @@ private struct ServiceRow: View {
     var body: some View {
         let d = model.display(runtime)
         let stopped = d.dot == .stopped
-        HStack(spacing: 10) {
+        let note = secondLine(d)
+        HStack(spacing: 8) {
             Button(action: open) {
-                HStack(alignment: .center, spacing: Layout.dotGap) {
-                    StatusDot(dot: d.dot)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(runtime.id)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(stopped ? Color.rbTextDim : Color.primary)
-                            .lineLimit(1)
-                        Text(d.subtitle)
-                            .font(d.subtitleMono ? .system(size: 10.5, design: .monospaced) : .system(size: 11))
-                            .foregroundStyle(d.warn ? Color.rbWarn : (stopped ? Color.rbText3 : Color.rbText2))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                HStack(alignment: .center, spacing: 10) {
+                    ServiceIcon(config: runtime.config, dot: d.dot)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            Text(runtime.id)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(stopped ? Color.rbTextDim : Color.primary)
+                                .lineLimit(1)
+                            if d.isProxy { RowTag(text: "proxy", symbol: "arrow.left.arrow.right") }
+                            if d.isExternal { RowTag(text: "outside Runbar") }
+                        }
+                        if let note {
+                            Text(note)
+                                .font(.system(size: 11))
+                                .foregroundStyle(d.warn ? Color.rbWarn : Color.rbText2)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -699,38 +942,12 @@ private struct ServiceRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(runtime.id), \(d.statusLabel)")
+            .help(d.subtitle)
+            .accessibilityLabel("\(runtime.id), \(ServiceKind.of(runtime.config).label)\(d.isProxy ? " proxy" : ""), \(d.statusLabel): \(d.subtitle)")
             .accessibilityHint("Open details")
 
-            if d.isProxy, let connections = d.connections {
-                // A proxy's number is who uses it; its memory is small and steady.
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(connections) conn")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(connections > 0 ? Color.primary : Color.rbText2)
-                    if let memory = d.memory {
-                        Text(Format.memory(memory))
-                            .font(.system(size: 10.5, design: .monospaced))
-                            .foregroundStyle(Color.rbText2)
-                    }
-                }
-                .lineLimit(1)
-                .frame(width: Layout.metricsWidth, alignment: .trailing)
-                .help(connections == 1 ? "1 connection open through this proxy" : "\(connections) connections open through this proxy")
-                .accessibilityElement(children: .combine)
-            } else if let memory = d.memory {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(Format.memory(memory))
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    Text(Format.cpu(d.cpu ?? 0))
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(Color.rbText2)
-                }
-                .lineLimit(1)
-                .frame(width: Layout.metricsWidth, alignment: .trailing)
-                .help("Memory and CPU of the process and its children")
-                .accessibilityElement(children: .combine)
-            }
+            metric(d)
+                .frame(width: 54, alignment: .trailing)
 
             if let label = d.portLabel {
                 if d.isProxy {
@@ -743,16 +960,18 @@ private struct ServiceRow: View {
                 } else {
                     Pill(text: label)
                 }
+            } else {
+                Color.clear.frame(width: Layout.pillWidth, height: 1)
             }
 
             Button { model.toggle(runtime.id) } label: { Image(systemName: d.actionSymbol) }
-                .buttonStyle(RowActionButtonStyle(tone: actionTone(d)))
+                .buttonStyle(RowActionButtonStyle(tone: actionTone(d), size: Layout.rowAction))
                 .help(actionHelp(d))
                 .accessibilityLabel(actionHelp(d))
         }
-        .padding(.leading, Layout.rowInset)
-        .padding(.trailing, 9)
-        .frame(height: Layout.rowHeight)
+        .padding(.leading, Self.inset)
+        .padding(.trailing, 7)
+        .frame(height: note == nil ? Layout.compactRow : Layout.rowHeight)
         .background(hover ? Color.rbControl.opacity(0.6) : Color.clear)
         .onHover { hover = $0 }
         .contextMenu {
@@ -765,6 +984,43 @@ private struct ServiceRow: View {
                 Button("Copy \(url.scheme ?? "connection") URL") { Pasteboard.copy(url.absoluteString) }
             }
             Button("Open full log") { NSWorkspace.shared.open(runtime.logURL) }
+        }
+    }
+
+    /// Alerts say theirs in "Needs you"; this is for what's left: waiting, a port in use, a dismissed alert.
+    private func secondLine(_ d: ServiceDisplay) -> String? {
+        if runtime.phase == .waiting { return d.subtitle }
+        if d.warn && !d.alert { return d.subtitle }
+        return nil
+    }
+
+    /// Memory, a proxy's connections, or what a service in motion is doing.
+    @ViewBuilder
+    private func metric(_ d: ServiceDisplay) -> some View {
+        let busy: String? = switch runtime.phase {
+        case .starting: d.isProxy ? "opening…" : "starting…"
+        case .stopping: d.isProxy ? "closing…" : "stopping…"
+        default: nil
+        }
+        if let busy {
+            Text(busy)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.rbText3)
+                .lineLimit(1)
+        } else if d.isProxy, let connections = d.connections {
+            Text("\(connections) conn")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(connections > 0 ? Color.rbText2 : Color.rbText3)
+                .lineLimit(1)
+                .help(connections == 1 ? "1 connection open through this proxy" : "\(connections) connections open through this proxy")
+        } else if let memory = d.memory {
+            Text(Format.memory(memory))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Color.rbText2)
+                .lineLimit(1)
+                .help("\(Format.memory(memory)) · \(Format.cpu(d.cpu ?? 0)) CPU, the process and its children")
+        } else {
+            Color.clear.frame(height: 1)
         }
     }
 
@@ -783,6 +1039,27 @@ private struct ServiceRow: View {
         case .stop: return d.isProxy ? "Close \(runtime.id)" : "Stop \(runtime.id)"
         case .retry: return d.isProxy ? "Try opening \(runtime.id) again" : "Try starting \(runtime.id) again"
         }
+    }
+}
+
+/// A small label beside a service's name: "proxy", "outside Runbar".
+private struct RowTag: View {
+    let text: String
+    var symbol: String?
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if let symbol {
+                Image(systemName: symbol).font(.system(size: 7.5, weight: .bold))
+            }
+            Text(text).font(.system(size: 10, weight: .medium))
+        }
+        .foregroundStyle(Color.rbText2)
+        .padding(.horizontal, 5)
+        .frame(height: 16)
+        .background(Color.rbControl, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .fixedSize()
+        .accessibilityHidden(true)
     }
 }
 

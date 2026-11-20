@@ -30,15 +30,19 @@ enum Layout {
     static let width: CGFloat = 400
     static let panelRadius: CGFloat = 22
     static let rowHeight: CGFloat = 46
+    /// Service rows in a project card: one line, two when something needs saying.
+    static let compactRow: CGFloat = 36
     static let rowInset: CGFloat = 12
+    /// The tile beside a service's name that says what it runs.
+    static let icon: CGFloat = 20
+    static let rowAction: CGFloat = 24
     static let dot: CGFloat = 8
     static let dotGap: CGFloat = 10
     static let control: CGFloat = 28
     static let pillWidth: CGFloat = 52
     static let metricsWidth: CGFloat = 56
     static let sectionSpacing: CGFloat = 14
-    static let tileHeight: CGFloat = 72
-    static let searchHeight: CGFloat = 40
+    static let tileHeight: CGFloat = 60
 }
 
 private struct ThemeKey: EnvironmentKey {
@@ -195,7 +199,3 @@ private struct BehindWindowBlur: NSViewRepresentable {
     }
 }
 
-extension Theme {
-    /// Color the list fades into beneath the floating search.
-    var panelFade: Color { glass ? .rbPanelTint : .rbPanelSolid }
-}
