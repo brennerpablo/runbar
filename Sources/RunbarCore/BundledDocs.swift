@@ -186,12 +186,12 @@ it keeps using the last valid version and shows the error with line and column.
         }
       }
     },
-    "finch": {
-      "name": "Blue Finch",
-      "root": "~/Developer/finch",
+    "orbit": {
+      "name": "Orbit Labs",
+      "root": "~/Developer/orbit",
       "services": {
-        "finch-api": {
-          "cwd": "finch-api",
+        "orbit-api": {
+          "cwd": "orbit-api",
           "type": "python",
           "command": ".venv/bin/uvicorn app.main:app --reload --port {port}",
           "port": 8000,
@@ -302,7 +302,7 @@ General settings (optional):
    command is what makes that possible; a fixed number in the command prevents it
    (`runbar validate` warns about it).
 6. Ids: letters, digits, `.`, `_` and `-`. A service id is unique across the whole
-   file. Prefer ids that already name the project (`acme-web`, `finch-site`).
+   file. Prefer ids that already name the project (`acme-web`, `orbit-site`).
 7. Don't remove existing services unless the user asks, and keep fields you
    don't understand.
 8. After editing, run `runbar validate`. It shows each problem with line and
