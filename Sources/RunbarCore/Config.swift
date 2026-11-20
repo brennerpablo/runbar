@@ -122,6 +122,8 @@ public struct SettingsConfig: Sendable, Equatable {
     public var notifyOnCrash: Bool = true
     /// Default autoPort for services that don't set their own.
     public var autoPort: Bool = false
+    /// The panel lists projects with something running before the others.
+    public var activeProjectsFirst: Bool = true
     public init() {}
 }
 
@@ -231,7 +233,7 @@ struct ConfigValidator {
     var defaultAutoPort = false
 
     static let rootKeys = ["$schema", "version", "settings", "projects"]
-    static let settingsKeys = ["look", "shell", "notifyOnCrash", "autoPort"]
+    static let settingsKeys = ["look", "shell", "notifyOnCrash", "autoPort", "activeProjectsFirst"]
     static let projectKeys = ["name", "root", "services"]
     static let serviceKeys = ["command", "cwd", "port", "type", "open", "env", "envFile", "health", "autostart", "restart", "stop", "autoPort", "install", "needs", "idle"]
 
@@ -440,6 +442,7 @@ struct ConfigValidator {
         }
         if let n = bool(o, "notifyOnCrash", "settings") { s.notifyOnCrash = n }
         if let a = bool(o, "autoPort", "settings") { s.autoPort = a }
+        if let f = bool(o, "activeProjectsFirst", "settings") { s.activeProjectsFirst = f }
         return s
     }
 

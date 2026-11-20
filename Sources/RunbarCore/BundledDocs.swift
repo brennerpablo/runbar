@@ -37,6 +37,11 @@ public enum BundledDocs {
           "type": "boolean",
           "default": false,
           "description": "Default for every service: if the configured port is taken, start on the next free port. Each service can override it."
+        },
+        "activeProjectsFirst": {
+          "type": "boolean",
+          "default": true,
+          "description": "List projects with something running before the others in the panel. The others keep their order from this file."
         }
       }
     },
@@ -269,11 +274,12 @@ port-forward`, `ssh -L`, `aws ssm start-session`. Declare it as a service with
 General settings (optional):
 
 ```json
-"settings": { "look": "auto", "shell": "/bin/zsh", "notifyOnCrash": true, "autoPort": false }
+"settings": { "look": "auto", "shell": "/bin/zsh", "notifyOnCrash": true, "autoPort": false, "activeProjectsFirst": true }
 ```
 
 `look`: `auto` (glass on macOS 26+), `solid` or `glass`.
 `autoPort`: default for every service; each service can override it.
+`activeProjectsFirst`: projects with something running come first in the panel (on by default).
 
 ## Rules
 
