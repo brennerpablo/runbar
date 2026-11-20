@@ -51,6 +51,16 @@ final class KeepAwake {
 
     func toggle() { isOn ? turnOff() : turnOn() }
 
+    #if DEBUG
+    /// Demo shots only: shows coffee mode on, as if turned on at `since` with the lid covered, without
+    /// holding an assertion or touching the sleep switch.
+    func showForDemo(since: Date?) {
+        self.since = since
+        lid = since == nil ? .none : .covered
+        stopReason = nil
+    }
+    #endif
+
     func turnOn() {
         guard !isOn else { return }
         var id = IOPMAssertionID(0)

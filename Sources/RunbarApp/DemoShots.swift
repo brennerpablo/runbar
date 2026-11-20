@@ -16,9 +16,9 @@ enum DemoShots {
             let suffix = dark ? "dark" : "light"
             DiskModel.shared.confirming = nil
             written.append(render(hero(model), name: "hero-\(suffix)", dir: dir, dark: dark))
-            written.append(render(framed(PopoverView(initialSelection: "finch-app").environment(model), dark: dark), name: "conflict-\(suffix)", dir: dir, dark: dark))
-            written.append(render(framed(PopoverView(initialSelection: "moonbase-db").environment(model), dark: dark), name: "outside-\(suffix)", dir: dir, dark: dark))
-            DiskModel.shared.confirming = Self.path("acme/acme-web/node_modules")
+            written.append(render(framed(PopoverView(initialSelection: "elrond-app").environment(model), dark: dark), name: "conflict-\(suffix)", dir: dir, dark: dark))
+            written.append(render(framed(PopoverView(initialSelection: "saruman-db").environment(model), dark: dark), name: "outside-\(suffix)", dir: dir, dark: dark))
+            DiskModel.shared.confirming = Self.path("fellowship/gandalf-app/node_modules")
             written.append(render(framed(PopoverView(initialTab: .disk, initialQuery: "node_modules").environment(model), dark: dark), name: "reinstall-\(suffix)", dir: dir, dark: dark))
             DiskModel.shared.confirming = nil
             written.append(render(framed(agentWindow(model), dark: dark, radius: 12), name: "agent-\(suffix)", dir: dir, dark: dark))
@@ -37,20 +37,23 @@ enum DemoShots {
         var written: [String] = []
         DiskModel.shared.confirming = nil
         written.append(render(alone(PopoverView().environment(model)), name: "panel-list", dir: dir, dark: true))
-        written.append(render(alone(PopoverView(initialSelection: "acme-web").environment(model)), name: "panel-detail", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "gandalf-app").environment(model)), name: "panel-detail", dir: dir, dark: true))
         written.append(render(alone(PopoverView(initialTab: .disk).environment(model)), name: "panel-disk", dir: dir, dark: true))
-        written.append(render(alone(PopoverView(initialSelection: "finch-app").environment(model)), name: "panel-conflict", dir: dir, dark: true))
-        written.append(render(alone(PopoverView(initialSelection: "moonbase-db").environment(model)), name: "panel-outside", dir: dir, dark: true))
-        DiskModel.shared.confirming = Self.path("acme/acme-web/node_modules")
+        written.append(render(alone(PopoverView(initialSelection: "elrond-app").environment(model)), name: "panel-conflict", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "saruman-db").environment(model)), name: "panel-outside", dir: dir, dark: true))
+        DiskModel.shared.confirming = Self.path("fellowship/gandalf-app/node_modules")
         written.append(render(alone(PopoverView(initialTab: .disk, initialQuery: "node_modules").environment(model)), name: "panel-reinstall", dir: dir, dark: true))
         DiskModel.shared.confirming = nil
         written.append(render(alone(agentWindow(model), radius: 12), name: "panel-agent", dir: dir, dark: true))
-        written.append(render(alone(PopoverView(initialSelection: "acme-db").environment(model)), name: "panel-proxy", dir: dir, dark: true))
-        written.append(render(alone(PopoverView(initialSelection: "finch-db").environment(model)), name: "panel-proxy-closed", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "boromir-db").environment(model)), name: "panel-proxy", dir: dir, dark: true))
+        written.append(render(alone(PopoverView(initialSelection: "bilbo-db").environment(model)), name: "panel-proxy-closed", dir: dir, dark: true))
         written.append(render(alone(PopoverView(initialQuery: "6379", initialShowOthers: true).environment(model)), name: "panel-launchd", dir: dir, dark: true))
         if let redis = model.otherListeners.first(where: { $0.port == 6379 }) {
             written.append(render(alone(PopoverView(initialImport: redis).environment(model)), name: "panel-import", dir: dir, dark: true))
         }
+        KeepAwake.shared.showForDemo(since: Date().addingTimeInterval(-(2 * 3600 + 14 * 60)))
+        written.append(render(alone(PopoverView().environment(model)), name: "panel-coffee", dir: dir, dark: true))
+        KeepAwake.shared.showForDemo(since: nil)
         written += clipFrames(model, into: dir, alone: { AnyView(alone($0)) })
         print(written.joined(separator: "\n"))
         exit(0)
@@ -66,69 +69,69 @@ enum DemoShots {
             written.append(render(alone(AnyView(view.environment(model))), name: name, dir: dir, dark: true))
         }
 
-        // Services: ▶ on acme-admin, starting, then running on :3001.
-        rt["acme-admin"]?.loadDemo(phase: .starting, pid: 61204, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 52, cpu: 31,
+        // Services: ▶ on gimli-admin, starting, then running on :3001.
+        rt["gimli-admin"]?.loadDemo(phase: .starting, pid: 61204, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 52, cpu: 31,
                                    processCount: 2, at: now, logs: ["> pnpm dev --port 3001"])
         shot(PopoverView(), "clip-start-starting")
-        rt["acme-admin"]?.loadDemo(phase: .running, pid: 61204, startedAt: now.addingTimeInterval(-4), lastLogAt: now, memoryMB: 274, cpu: 4.6,
+        rt["gimli-admin"]?.loadDemo(phase: .running, pid: 61204, startedAt: now.addingTimeInterval(-4), lastLogAt: now, memoryMB: 274, cpu: 4.6,
                                    processCount: 3, listening: [3001], at: now,
                                    logs: ["> pnpm dev --port 3001", "   ▲ Next.js 16.0.3 (Turbopack)", " ✓ Ready in 1.9s"])
         shot(PopoverView(), "clip-start-running")
-        rt["acme-admin"]?.loadDemo(phase: .stopped, at: now)
+        rt["gimli-admin"]?.loadDemo(phase: .stopped, at: now)
 
         // Disk, before anything below changes the header: the filtered list, Reinstall's confirmation (panel-reinstall),
         // then the reinstall under way.
-        let modules = path("acme/acme-web/node_modules")
+        let modules = path("fellowship/gandalf-app/node_modules")
         DiskModel.shared.confirming = nil
         shot(PopoverView(initialTab: .disk, initialQuery: "node_modules"), "clip-disk-filtered")
         if let item = DiskModel.shared.projects.flatMap(\.items).first(where: { $0.id == modules }) {
-            DiskModel.shared.loadDemoJob(DiskJob(item: item, action: .reinstall, services: ["acme-web"], step: .installing,
+            DiskModel.shared.loadDemoJob(DiskJob(item: item, action: .reinstall, services: ["gandalf-app"], step: .installing,
                                                  stepStartedAt: Date().addingTimeInterval(-9), startedAt: Date().addingTimeInterval(-14),
                                                  lastLine: "added 1184 packages, and audited 1185 packages in 9s"))
             shot(PopoverView(initialTab: .disk, initialQuery: "node_modules"), "clip-disk-installing")
             DiskModel.shared.loadDemoJob(nil)
         }
 
-        // Ports: "Kill node and restart this one", then finch-app back on :3100.
+        // Ports: "Kill node and restart this one", then elrond-app back on :3100.
         let listeners = model.otherListeners.filter { $0.port != 3100 }
         model.loadDemo(config: model.config, now: now, portOwners: [:], otherListeners: listeners, launchdJobs: model.launchdJobs)
-        rt["finch-app"]?.loadDemo(phase: .starting, pid: 61377, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 88, cpu: 38,
+        rt["elrond-app"]?.loadDemo(phase: .starting, pid: 61377, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 88, cpu: 38,
                                   processCount: 2, at: now, logs: ["> next dev -p 3100"])
-        shot(PopoverView(initialSelection: "finch-app"), "clip-port-starting")
-        rt["finch-app"]?.loadDemo(phase: .running, pid: 61377, startedAt: now.addingTimeInterval(-5), lastLogAt: now, memoryMB: 341, cpu: 2.2,
+        shot(PopoverView(initialSelection: "elrond-app"), "clip-port-starting")
+        rt["elrond-app"]?.loadDemo(phase: .running, pid: 61377, startedAt: now.addingTimeInterval(-5), lastLogAt: now, memoryMB: 341, cpu: 2.2,
                                   processCount: 3, listening: [3100],
                                   memHistoryMB: (0..<120).map { i in 330 + Double((i * 7) % 11) * 2 },
                                   cpuSeries: (0..<120).map { i in 1 + Double((i * 3) % 4) * 0.5 }, at: now,
                                   logs: ["   ▲ Next.js 16.0.3 (Turbopack)", "   - Local:        http://localhost:3100", " ✓ Ready in 1.2s"])
-        shot(PopoverView(initialSelection: "finch-app"), "clip-port-fixed")
+        shot(PopoverView(initialSelection: "elrond-app"), "clip-port-fixed")
 
-        // Proxies: acme-db closed with acme-api stopped; starting acme-api opens it first.
-        rt["acme-api"]?.loadDemo(phase: .stopped, exitedAt: now.addingTimeInterval(-13 * 60), exitCode: 0, at: now)
-        rt["acme-db"]?.loadDemo(phase: .stopped, exitedAt: now.addingTimeInterval(-60), exitCode: 0, at: now,
+        // Proxies: boromir-db closed with aragorn-api stopped; starting aragorn-api opens it first.
+        rt["aragorn-api"]?.loadDemo(phase: .stopped, exitedAt: now.addingTimeInterval(-13 * 60), exitCode: 0, at: now)
+        rt["boromir-db"]?.loadDemo(phase: .stopped, exitedAt: now.addingTimeInterval(-60), exitCode: 0, at: now,
                                 logs: ["── Runbar · Nov 12 2026 10:40:00 · closed after 15 min with no connections"])
-        rt["acme-db"]?.loadDemoUsage(closedIdleAt: now.addingTimeInterval(-60))
-        shot(PopoverView(initialSelection: "acme-db"), "clip-proxy-closed")
+        rt["boromir-db"]?.loadDemoUsage(closedIdleAt: now.addingTimeInterval(-60))
+        shot(PopoverView(initialSelection: "boromir-db"), "clip-proxy-closed")
         shot(PopoverView(), "clip-proxy-list-closed")
-        rt["acme-api"]?.loadDemo(phase: .waiting, at: now, waitingFor: ["acme-db"])
-        rt["acme-db"]?.loadDemo(phase: .starting, pid: 61450, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 12, cpu: 8,
+        rt["aragorn-api"]?.loadDemo(phase: .waiting, at: now, waitingFor: ["boromir-db"])
+        rt["boromir-db"]?.loadDemo(phase: .starting, pid: 61450, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 12, cpu: 8,
                                 processCount: 1, at: now, logs: ["2026/11/12 10:41:02 Authorizing with Application Default Credentials"])
-        rt["acme-db"]?.loadDemoUsage(heldBy: ["acme-api"])
+        rt["boromir-db"]?.loadDemoUsage(heldBy: ["aragorn-api"])
         shot(PopoverView(), "clip-proxy-list-opening")
-        rt["acme-db"]?.loadDemo(phase: .running, pid: 61450, startedAt: now.addingTimeInterval(-3), lastLogAt: now, memoryMB: 17, cpu: 0.4,
+        rt["boromir-db"]?.loadDemo(phase: .running, pid: 61450, startedAt: now.addingTimeInterval(-3), lastLogAt: now, memoryMB: 17, cpu: 0.4,
                                 processCount: 1, listening: [5434], at: now,
                                 logs: [
-                                    "── Runbar · Nov 12 2026 10:41:02 · opened for acme-api",
+                                    "── Runbar · Nov 12 2026 10:41:02 · opened for aragorn-api",
                                     "2026/11/12 10:41:02 Authorizing with Application Default Credentials",
-                                    "2026/11/12 10:41:03 [acme-prod:us-central1:acme] Listening on 127.0.0.1:5434",
+                                    "2026/11/12 10:41:03 [fellowship-prod:us-central1:fellowship] Listening on 127.0.0.1:5434",
                                     "2026/11/12 10:41:03 The proxy has started successfully and is ready for new connections!",
-                                    "2026/11/12 10:41:04 [acme-prod:us-central1:acme] Accepted connection from 127.0.0.1:64110",
+                                    "2026/11/12 10:41:04 [fellowship-prod:us-central1:fellowship] Accepted connection from 127.0.0.1:64110",
                                 ])
-        rt["acme-api"]?.loadDemo(phase: .running, pid: 61461, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 162, cpu: 6.1,
+        rt["aragorn-api"]?.loadDemo(phase: .running, pid: 61461, startedAt: now.addingTimeInterval(-1), lastLogAt: now, memoryMB: 162, cpu: 6.1,
                                  processCount: 2, listening: [8000], at: now, logs: ["INFO:     Application startup complete."])
-        rt["acme-db"]?.loadDemoUsage(clients: [ProxyClient(id: "acme-api", name: "acme-api", serviceID: "acme-api", pid: 61461, connections: 1)],
-                                     heldBy: ["acme-api"])
+        rt["boromir-db"]?.loadDemoUsage(clients: [ProxyClient(id: "aragorn-api", name: "aragorn-api", serviceID: "aragorn-api", pid: 61461, connections: 1)],
+                                     heldBy: ["aragorn-api"])
         shot(PopoverView(), "clip-proxy-list-open")
-        shot(PopoverView(initialSelection: "acme-db"), "clip-proxy-open")
+        shot(PopoverView(initialSelection: "boromir-db"), "clip-proxy-open")
 
         return written
     }
@@ -139,7 +142,7 @@ enum DemoShots {
     private static func hero(_ model: AppModel) -> some View {
         HStack(alignment: .top, spacing: 36) {
             panel(PopoverView().environment(model))
-            panel(PopoverView(initialSelection: "acme-web").environment(model))
+            panel(PopoverView(initialSelection: "gandalf-app").environment(model))
             panel(PopoverView(initialTab: .disk).environment(model))
         }
         .padding(56)
@@ -235,24 +238,24 @@ enum DemoShots {
     {
       "version": 1,
       "projects": {
-        "acme": { "name": "Acme Store", "root": "~/Developer/acme", "services": {
-          "acme-web": { "cwd": "acme-web", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3000 },
-          "acme-api": { "cwd": "acme-api", "type": "python", "command": ".venv/bin/uvicorn app.main:app --reload --port {port}", "port": 8000, "open": "http://localhost:{port}/docs", "needs": ["acme-db"] },
-          "acme-worker": { "cwd": "acme-worker", "type": "node", "command": "npm run worker" },
-          "acme-admin": { "cwd": "acme-admin", "type": "nextjs", "command": "pnpm dev --port {port}", "port": 3001 },
-          "acme-db": { "type": "proxy", "command": "cloud-sql-proxy --port {port} acme-prod:us-central1:acme", "port": 5434, "open": "postgres://localhost:{port}/acme" }
+        "fellowship": { "name": "Fellowship", "root": "~/Developer/fellowship", "services": {
+          "gandalf-app": { "cwd": "gandalf-app", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3000 },
+          "aragorn-api": { "cwd": "aragorn-api", "type": "python", "command": ".venv/bin/uvicorn app.main:app --reload --port {port}", "port": 8000, "open": "http://localhost:{port}/docs", "needs": ["boromir-db"] },
+          "legolas-worker": { "cwd": "legolas-worker", "type": "node", "command": "npm run worker" },
+          "gimli-admin": { "cwd": "gimli-admin", "type": "nextjs", "command": "pnpm dev --port {port}", "port": 3001 },
+          "boromir-db": { "type": "proxy", "command": "cloud-sql-proxy --port {port} fellowship-prod:us-central1:fellowship", "port": 5434, "open": "postgres://localhost:{port}/fellowship" }
         }},
-        "finch": { "name": "Blue Finch", "root": "~/Developer/finch", "services": {
-          "finch-app": { "cwd": "finch-app", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3100 },
-          "finch-docs": { "cwd": "finch-docs", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3101 },
-          "finch-db": { "type": "proxy", "command": "kubectl port-forward svc/postgres {port}:5432", "port": 5435 }
+        "rivendell": { "name": "Rivendell", "root": "~/Developer/rivendell", "services": {
+          "elrond-app": { "cwd": "elrond-app", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3100 },
+          "arwen-docs": { "cwd": "arwen-docs", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3101 },
+          "bilbo-db": { "type": "proxy", "command": "kubectl port-forward svc/postgres {port}:5432", "port": 5435 }
         }},
-        "moonbase": { "name": "Moonbase", "root": "~/Developer/moonbase", "services": {
-          "moonbase-api": { "cwd": "api", "type": "python", "command": ".venv/bin/uvicorn main:app --reload --port {port}", "port": 8100 },
-          "moonbase-db": { "cwd": "db", "type": "docker", "command": "docker compose up", "stop": "docker compose down", "port": 5433 }
+        "mordor": { "name": "Mordor", "root": "~/Developer/mordor", "services": {
+          "sauron-api": { "cwd": "api", "type": "python", "command": ".venv/bin/uvicorn main:app --reload --port {port}", "port": 8100 },
+          "saruman-db": { "cwd": "db", "type": "docker", "command": "docker compose up", "stop": "docker compose down", "port": 5433 }
         }},
-        "kite": { "name": "Paper Kite", "root": "~/Developer/kite", "services": {
-          "kite-site": { "cwd": "kite-site", "type": "node", "command": "npm run dev -- --port {port}", "port": 4321 }
+        "shire": { "name": "The Shire", "root": "~/Developer/shire", "services": {
+          "frodo-site": { "cwd": "frodo-site", "type": "node", "command": "npm run dev -- --port {port}", "port": 4321 }
         }}
       }
     }
@@ -285,15 +288,15 @@ enum DemoShots {
             ]
         )
         let rt = model.runtimes
-        rt["acme-web"]?.loadDemo(
+        rt["gandalf-app"]?.loadDemo(
             phase: .running, pid: 48213, startedAt: ago(149), lastLogAt: now.addingTimeInterval(-3), memoryMB: 412, cpu: 3.1,
             processCount: 3, listening: [3000],
             memHistoryMB: series(120) { i in 300 + Double(i % 48) * 2.2 + Double(i) * 0.25 },
             cpuSeries: series(120) { i in i % 37 == 20 ? 46 : (i % 13 == 5 ? 18 : 2.5 + Double((i * 5) % 7)) },
             at: now,
             logs: [
-                "── Runbar · Nov 12 2026 08:12:04 · npm run dev -- -p 3000 · in ~/Developer/acme/acme-web",
-                "> acme-web@0.1.0 dev",
+                "── Runbar · Nov 12 2026 08:12:04 · npm run dev -- -p 3000 · in ~/Developer/fellowship/gandalf-app",
+                "> gandalf-app@0.1.0 dev",
                 "> next dev -p 3000",
                 "   ▲ Next.js 16.0.3 (Turbopack)",
                 "   - Local:        http://localhost:3000",
@@ -306,62 +309,62 @@ enum DemoShots {
                 " GET /products/aurora-lamp 200 in 96ms",
             ]
         )
-        rt["acme-api"]?.loadDemo(
+        rt["aragorn-api"]?.loadDemo(
             phase: .running, pid: 48230, startedAt: ago(149), lastLogAt: now.addingTimeInterval(-41), memoryMB: 186, cpu: 0.6,
             processCount: 2, listening: [8000],
             memHistoryMB: series(120) { i in 180 + Double((i * 7) % 9) }, cpuSeries: series(120) { i in 0.3 + Double((i * 3) % 5) * 0.1 }, at: now,
             logs: ["INFO:     Application startup complete.", "INFO:     127.0.0.1:52811 - \"GET /orders?limit=20 HTTP/1.1\" 200 OK"]
         )
-        rt["acme-worker"]?.loadDemo(
+        rt["legolas-worker"]?.loadDemo(
             phase: .running, pid: 48251, startedAt: ago(148), lastLogAt: now.addingTimeInterval(-12), memoryMB: 96, cpu: 0.2,
             processCount: 1, memHistoryMB: series(120) { i in 92 + Double(i % 5) }, cpuSeries: series(120) { _ in 0.2 }, at: now,
             logs: ["[worker] sent 3 order confirmation emails"]
         )
-        rt["finch-app"]?.loadDemo(
+        rt["elrond-app"]?.loadDemo(
             phase: .running, pid: 51877, startedAt: ago(38), lastLogAt: now.addingTimeInterval(-6), memoryMB: 356, cpu: 1.8,
             processCount: 3, listening: [3102],
             memHistoryMB: series(120) { i in 330 + Double((i * 7) % 11) * 2 }, cpuSeries: series(120) { i in 1 + Double((i * 3) % 4) * 0.5 }, at: now,
             logs: [" ⚠ Port 3100 is in use, trying 3102 instead.", "   - Local:        http://localhost:3102", " ✓ Ready in 1.1s"]
         )
-        rt["finch-docs"]?.loadDemo(
+        rt["arwen-docs"]?.loadDemo(
             phase: .starting, pid: 52010, startedAt: now.addingTimeInterval(-9), lastLogAt: now.addingTimeInterval(-2), memoryMB: 64, cpu: 12,
             processCount: 2, at: now, logs: ["> next dev -p 3101"]
         )
-        rt["moonbase-api"]?.loadDemo(
+        rt["sauron-api"]?.loadDemo(
             phase: .crashed(1), exitedAt: ago(6), exitCode: 1, at: now,
             logs: [
                 "Traceback (most recent call last):",
-                "  File \"/Users/you/Developer/moonbase/api/main.py\", line 3, in <module>",
+                "  File \"/Users/you/Developer/mordor/api/main.py\", line 3, in <module>",
                 "ModuleNotFoundError: No module named 'httpx'",
             ]
         )
-        rt["moonbase-db"]?.loadDemo(
+        rt["saruman-db"]?.loadDemo(
             phase: .stopped, at: now,
             external: ExternalRun(rootPID: 7712, pids: [7712, 7720], ports: [5433], memory: 220 * 1_048_576, cpu: 0.4,
                                   startedAt: now.addingTimeInterval(-16 * 3600 - 39 * 60))
         )
-        rt["kite-site"]?.loadDemo(phase: .stopped, exitedAt: ago(130), exitCode: 0, at: now)
-        rt["acme-db"]?.loadDemo(
+        rt["frodo-site"]?.loadDemo(phase: .stopped, exitedAt: ago(130), exitCode: 0, at: now)
+        rt["boromir-db"]?.loadDemo(
             phase: .running, pid: 48202, startedAt: ago(149), lastLogAt: ago(3), memoryMB: 18, cpu: 0.1, processCount: 1, listening: [5434], at: now,
             logs: [
-                "── Runbar · Nov 12 2026 08:12:01 · cloud-sql-proxy --port 5434 acme-prod:us-central1:acme · in ~/Developer/acme",
+                "── Runbar · Nov 12 2026 08:12:01 · cloud-sql-proxy --port 5434 fellowship-prod:us-central1:fellowship · in ~/Developer/fellowship",
                 "2026/11/12 08:12:01 Authorizing with Application Default Credentials",
-                "2026/11/12 08:12:02 [acme-prod:us-central1:acme] Listening on 127.0.0.1:5434",
+                "2026/11/12 08:12:02 [fellowship-prod:us-central1:fellowship] Listening on 127.0.0.1:5434",
                 "2026/11/12 08:12:02 The proxy has started successfully and is ready for new connections!",
-                "2026/11/12 08:12:09 [acme-prod:us-central1:acme] Accepted connection from 127.0.0.1:61022",
-                "2026/11/12 10:38:47 [acme-prod:us-central1:acme] Accepted connection from 127.0.0.1:63518",
+                "2026/11/12 08:12:09 [fellowship-prod:us-central1:fellowship] Accepted connection from 127.0.0.1:61022",
+                "2026/11/12 10:38:47 [fellowship-prod:us-central1:fellowship] Accepted connection from 127.0.0.1:63518",
             ]
         )
-        rt["acme-db"]?.loadDemoUsage(
+        rt["boromir-db"]?.loadDemoUsage(
             clients: [
-                ProxyClient(id: "acme-api", name: "acme-api", serviceID: "acme-api", pid: 48230, connections: 3),
+                ProxyClient(id: "aragorn-api", name: "aragorn-api", serviceID: "aragorn-api", pid: 48230, connections: 3),
                 ProxyClient(id: "pid-61022", name: "psql", serviceID: nil, pid: 61022, connections: 1),
             ],
-            heldBy: ["acme-api"]
+            heldBy: ["aragorn-api"]
         )
-        rt["finch-db"]?.loadDemo(phase: .stopped, exitedAt: ago(12), exitCode: 0, at: now,
+        rt["bilbo-db"]?.loadDemo(phase: .stopped, exitedAt: ago(12), exitCode: 0, at: now,
                                  logs: ["── Runbar · Nov 12 2026 10:29:00 · closed after 15 min with no connections"])
-        rt["finch-db"]?.loadDemoUsage(closedIdleAt: ago(12))
+        rt["bilbo-db"]?.loadDemoUsage(closedIdleAt: ago(12))
 
         let gb: (Double) -> UInt64 = { UInt64($0 * 1_073_741_824) }
         let mb: (Double) -> UInt64 = { UInt64($0 * 1_048_576) }
@@ -379,28 +382,28 @@ enum DemoShots {
         let venv = { (python: String) in "/opt/homebrew/opt/python@\(python)/bin/python3 -m venv .venv && .venv/bin/pip install -r requirements.txt" }
         DiskModel.shared.loadDemo(
             projects: [
-                ProjectDisk(id: "acme", name: "Acme Store", root: path("acme"), items: [
-                    item("acme", "acme-web", ".next", .build, gb(18.4), service: "acme-web"),
-                    item("acme", "acme-admin", ".next", .build, gb(2.1), service: "acme-admin"),
-                    item("acme", "acme-web", "node_modules", .dependencies, gb(1.24), service: "acme-web", install: "npm ci", source: "package-lock.json"),
-                    item("acme", "wt-checkout-redesign", "node_modules", .dependencies, gb(1.18), worktree: true, install: "npm ci", source: "package-lock.json"),
-                    item("acme", "acme-admin", "node_modules", .dependencies, mb(980), service: "acme-admin", install: "pnpm install --frozen-lockfile", source: "pnpm-lock.yaml"),
-                    item("acme", "wt-checkout-redesign", ".next", .build, mb(860), worktree: true),
-                    item("acme", "acme-api", ".venv", .dependencies, mb(640), service: "acme-api", install: venv("3.12"), source: "requirements.txt", detail: "Python 3.12"),
-                    tools("acme", "acme-api", [".mypy_cache", ".pytest_cache", ".ruff_cache"], mb(118)),
+                ProjectDisk(id: "fellowship", name: "Fellowship", root: path("fellowship"), items: [
+                    item("fellowship", "gandalf-app", ".next", .build, gb(18.4), service: "gandalf-app"),
+                    item("fellowship", "gimli-admin", ".next", .build, gb(2.1), service: "gimli-admin"),
+                    item("fellowship", "gandalf-app", "node_modules", .dependencies, gb(1.24), service: "gandalf-app", install: "npm ci", source: "package-lock.json"),
+                    item("fellowship", "wt-checkout-redesign", "node_modules", .dependencies, gb(1.18), worktree: true, install: "npm ci", source: "package-lock.json"),
+                    item("fellowship", "gimli-admin", "node_modules", .dependencies, mb(980), service: "gimli-admin", install: "pnpm install --frozen-lockfile", source: "pnpm-lock.yaml"),
+                    item("fellowship", "wt-checkout-redesign", ".next", .build, mb(860), worktree: true),
+                    item("fellowship", "aragorn-api", ".venv", .dependencies, mb(640), service: "aragorn-api", install: venv("3.12"), source: "requirements.txt", detail: "Python 3.12"),
+                    tools("fellowship", "aragorn-api", [".mypy_cache", ".pytest_cache", ".ruff_cache"], mb(118)),
                 ].sorted { $0.bytes > $1.bytes }, worktreeCount: 2),
-                ProjectDisk(id: "finch", name: "Blue Finch", root: path("finch"), items: [
-                    item("finch", "finch-app", ".next", .build, gb(6.2), service: "finch-app"),
-                    item("finch", "finch-app", "node_modules", .dependencies, gb(1.1), service: "finch-app", install: "npm ci", source: "package-lock.json"),
-                    item("finch", "finch-docs", "node_modules", .dependencies, mb(720), service: "finch-docs", install: "npm ci", source: "package-lock.json"),
-                    item("finch", "finch-docs", ".next", .build, mb(410), service: "finch-docs"),
+                ProjectDisk(id: "rivendell", name: "Rivendell", root: path("rivendell"), items: [
+                    item("rivendell", "elrond-app", ".next", .build, gb(6.2), service: "elrond-app"),
+                    item("rivendell", "elrond-app", "node_modules", .dependencies, gb(1.1), service: "elrond-app", install: "npm ci", source: "package-lock.json"),
+                    item("rivendell", "arwen-docs", "node_modules", .dependencies, mb(720), service: "arwen-docs", install: "npm ci", source: "package-lock.json"),
+                    item("rivendell", "arwen-docs", ".next", .build, mb(410), service: "arwen-docs"),
                 ]),
-                ProjectDisk(id: "moonbase", name: "Moonbase", root: path("moonbase"), items: [
-                    item("moonbase", "api", ".venv", .dependencies, mb(520), service: "moonbase-api", install: venv("3.11"), source: "requirements.txt", detail: "Python 3.11"),
-                    tools("moonbase", "api", [".mypy_cache", ".pytest_cache"], mb(64)),
+                ProjectDisk(id: "mordor", name: "Mordor", root: path("mordor"), items: [
+                    item("mordor", "api", ".venv", .dependencies, mb(520), service: "sauron-api", install: venv("3.11"), source: "requirements.txt", detail: "Python 3.11"),
+                    tools("mordor", "api", [".mypy_cache", ".pytest_cache"], mb(64)),
                 ]),
-                ProjectDisk(id: "kite", name: "Paper Kite", root: path("kite"), items: [
-                    item("kite", "kite-site", "node_modules", .dependencies, mb(380), service: "kite-site", install: "npm ci", source: "package-lock.json"),
+                ProjectDisk(id: "shire", name: "The Shire", root: path("shire"), items: [
+                    item("shire", "frodo-site", "node_modules", .dependencies, mb(380), service: "frodo-site", install: "npm ci", source: "package-lock.json"),
                 ]),
             ],
             free: gb(38), capacity: gb(460), scannedAt: Date().addingTimeInterval(-120)

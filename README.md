@@ -127,7 +127,7 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
 </table>
 
 > [!NOTE]
-> **The screenshots use made-up projects** (Acme Store, Blue Finch, Moonbase, Paper Kite). `make screenshots`
+> **The screenshots use made-up projects** (Fellowship, Rivendell, Mordor, The Shire). `make screenshots`
 > redraws them from that demo data in `Sources/RunbarApp/DemoShots.swift`, which only debug builds include.
 
 ## Configure it with your agent
@@ -141,14 +141,14 @@ ready-made request: paste it into your agent and it scans your folders and write
   "$schema": "./schema.json",
   "version": 1,
   "projects": {
-    "acme": {
-      "name": "Acme Store",
-      "root": "~/Developer/acme",
+    "fellowship": {
+      "name": "Fellowship",
+      "root": "~/Developer/fellowship",
       "services": {
-        "acme-web": { "cwd": "acme-web", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3000 },
-        "acme-api": { "cwd": "acme-api", "type": "python", "command": ".venv/bin/uvicorn app.main:app --reload --port {port}",
+        "gandalf-app": { "cwd": "gandalf-app", "type": "nextjs", "command": "npm run dev -- -p {port}", "port": 3000 },
+        "aragorn-api": { "cwd": "aragorn-api", "type": "python", "command": ".venv/bin/uvicorn app.main:app --reload --port {port}",
                       "port": 8000, "open": "http://localhost:{port}/docs", "restart": "on-crash" },
-        "acme-db":  { "cwd": "db", "type": "docker", "command": "docker compose up", "stop": "docker compose down", "port": 5433 }
+        "boromir-db":  { "cwd": "db", "type": "docker", "command": "docker compose up", "stop": "docker compose down", "port": 5433 }
       }
     }
   }
@@ -164,15 +164,15 @@ to `~/.config/runbar/README.md`. `runbar validate` points to each error by line 
 ```
 $ runbar status
 SERVICE                 STATUS          PORT    MEM       CPU     SINCE
-acme-web                running         :3000   412 MB    3.1%    08:12
-acme-api                running         :8000   186 MB    0.6%    08:12
-acme-worker             running         —       96 MB     0.2%    08:13
-acme-admin              stopped         :3001   —         —
-finch-app               running         :3102   356 MB    1.8%    10:03  ⚠ on :3102 · expected :3100
-finch-docs              starting        :3101   64 MB     12.0%   10:40
-moonbase-api            crashed         :8100   —         —         ⚠ Crashed — exit code 1 · ModuleNotFoundError: No module named 'httpx'
-moonbase-db             outside Runbar  :5433   220 MB    0.4%    Nov 11 18:02
-kite-site               stopped         :4321   —         —
+gandalf-app             running         :3000   412 MB    3.1%    08:12
+aragorn-api             running         :8000   186 MB    0.6%    08:12
+legolas-worker          running         —       96 MB     0.2%    08:13
+gimli-admin             stopped         :3001   —         —
+elrond-app              running         :3102   356 MB    1.8%    10:03  ⚠ on :3102 · expected :3100
+arwen-docs              starting        :3101   64 MB     12.0%   10:40
+sauron-api              crashed         :8100   —         —         ⚠ Crashed — exit code 1 · ModuleNotFoundError: No module named 'httpx'
+saruman-db              outside Runbar  :5433   220 MB    0.4%    Nov 11 18:02
+frodo-site              stopped         :4321   —         —
 ```
 
 <details>
