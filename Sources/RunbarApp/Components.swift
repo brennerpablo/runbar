@@ -501,6 +501,37 @@ private struct IconButtonBody: View {
     }
 }
 
+/// A toggle inside a tinted strip (coffee mode's No lock): an icon and a short label. The strip already
+/// wears the app's color, so on is a deeper tint of it and off is the label alone, a step fainter.
+struct StripToggleStyle: ButtonStyle {
+    var on: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        StripToggleBody(configuration: configuration, on: on)
+    }
+}
+
+private struct StripToggleBody: View {
+    let configuration: ButtonStyleConfiguration
+    let on: Bool
+    @Environment(\.theme) private var theme
+    @ViewState private var hover = false
+
+    var body: some View {
+        configuration.label
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(Color.rbLive.opacity(on || hover ? 1 : 0.75))
+            .padding(.horizontal, 7)
+            .frame(minWidth: 26, minHeight: 26)
+            .background(
+                Color.rbLive.opacity(configuration.isPressed ? 0.26 : (on ? 0.18 : (hover ? 0.1 : 0))),
+                in: RoundedRectangle(cornerRadius: theme.pillRadius, style: .continuous)
+            )
+            .contentShape(Rectangle())
+            .onHover { hover = $0 }
+    }
+}
+
 /// Clickable text for low-key actions (start all, open full log, back).
 struct TextButtonStyle: ButtonStyle {
     var accent = false

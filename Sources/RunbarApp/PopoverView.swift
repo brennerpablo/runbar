@@ -303,21 +303,14 @@ struct PopoverView: View {
         let lid: String
         switch awake.lid {
         case .none: lid = ""
-        case .asking: lid = LidSleep.grantInstalled ? " · covering the lid…" : " · waiting for your password"
+        case .asking: lid = LidSleep.grantInstalled ? " · covering the lid…" : " · waiting for password"
         case .covered: lid = " · lid closed too"
         case .uncovered: lid = " · closing the lid still sleeps"
         }
-        return HStack(spacing: 8) {
-            Image(systemName: "cup.and.heat.waves.fill")
-                .font(.system(size: 11.5, weight: .semibold))
-            Text("\(Text("Coffee mode").fontWeight(.semibold))\(lid)")
-                .font(.system(size: 12))
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 4)
-            Button("Turn off") { awake.toggle() }
-                .buttonStyle(TextButtonStyle(accent: true, size: 11.5))
-                .accessibilityLabel("Turn coffee mode off")
+        // The screen toggle drops its label when the lid's state needs the room (a warning shouldn't be cut).
+        return ViewThatFits(in: .horizontal) {
+            coffeeRow(awake, lid: lid, labeled: true)
+            coffeeRow(awake, lid: lid, labeled: false)
         }
         .foregroundStyle(Color.rbLive)
         .padding(.leading, 10)
@@ -328,24 +321,58 @@ struct PopoverView: View {
         .accessibilityElement(children: .contain)
     }
 
+    private func coffeeRow(_ awake: KeepAwake, lid: String, labeled: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "cup.and.heat.waves.fill")
+                .font(.system(size: 11.5, weight: .semibold))
+            Text("\(Text("Coffee mode").fontWeight(.semibold))\(lid)")
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+            HStack(spacing: 2) {
+                Button { awake.toggleScreen() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "lock.open.fill")
+                            .font(.system(size: 10.5, weight: .semibold))
+                        if labeled { Text("No lock") }
+                    }
+                }
+                .buttonStyle(StripToggleStyle(on: awake.screenOn))
+                .help(awake.screenOn
+                    ? "No lock: the screen stays on and unlocked, like while a video plays. Click to let it turn off and lock."
+                    : "No lock is off: the screen turns off and locks as usual. Click to keep it on and unlocked, like while a video plays.")
+                .accessibilityLabel("Keep the screen on and unlocked")
+                .accessibilityValue(awake.screenOn ? "On" : "Off")
+                .accessibilityAddTraits(.isToggle)
+                Button("Turn off") { awake.toggle() }
+                    .buttonStyle(TextButtonStyle(accent: true, size: 11.5))
+                    .accessibilityLabel("Turn coffee mode off")
+            }
+        }
+    }
+
     private func coffeeHelp(_ awake: KeepAwake) -> String {
         guard let since = awake.since else {
+            let screen = awake.screenOn ? "The screen stays on and unlocked too." : "The display still turns off and locks."
             let what = LidSleep.hasLid
-                ? "Coffee mode: keep the Mac awake while you're away, lid closed too. The display still turns off and locks."
-                : "Coffee mode: keep the Mac awake while you're away. The display still turns off and locks."
+                ? "Coffee mode: keep the Mac awake while you're away, lid closed too. \(screen)"
+                : "Coffee mode: keep the Mac awake while you're away. \(screen)"
             return awake.stopReason.map { "Turned itself off: \($0). \(what)" } ?? what
         }
         let base = "Keeping the Mac awake since \(Format.clock(since))"
+        let state: String
         switch awake.lid {
         case .none:
-            return "\(base)."
+            state = "\(base)."
         case .asking:
-            return LidSleep.grantInstalled ? "\(base). Turning lid-close sleep off…" : "\(base). Waiting for your password to cover closing the lid too."
+            state = LidSleep.grantInstalled ? "\(base). Turning lid-close sleep off…" : "\(base). Waiting for your password to cover closing the lid too."
         case .covered:
-            return "\(base), lid closed too. On battery it stops at \(KeepAwake.batteryFloor)%."
+            state = "\(base), lid closed too. On battery it stops at \(KeepAwake.batteryFloor)%."
         case .uncovered:
-            return "\(base), but closing the lid will still put it to sleep. Turn it off and on to try again."
+            state = "\(base), but closing the lid will still put it to sleep. Turn it off and on to try again."
         }
+        return awake.screenOn ? "\(state) The screen stays on and unlocked." : state
     }
 
     /// Everything that used to live in the footer: refresh, config, look, folders and quit. A right click on

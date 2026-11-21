@@ -80,8 +80,11 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
 **Coffee mode**
 - The cup in the header keeps the Mac from sleeping while you're away and an agent is still working,
   **lid closed included**. Locked isn't asleep: the display still turns off and locks, and everything keeps
-  running. While it's on, a strip in the panel says for how long, with Turn off, and the `>_` in the menu
+  running. While it's on, a strip in the panel says what it covers, with Turn off, and the `>_` in the menu
   bar turns green.
+- **No lock**, in that strip, keeps the screen on and unlocked too, the way a playing video does: the display
+  doesn't dim, the screen saver doesn't start and nothing locks until you lock it or close the lid. Runbar
+  remembers the choice for next time.
 - Not sleeping when idle needs nothing special. Not sleeping when the lid closes takes the kernel's
   `SleepDisabled` switch (`pmset -a disablesleep`), which only root can set: the first time, macOS asks for
   your password to install `/etc/sudoers.d/runbar`, which allows exactly `pmset -a disablesleep 1` and `0`.

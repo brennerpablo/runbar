@@ -5,6 +5,8 @@ import Observation
 
 /// Keeps the Mac awake while you're away and an agent or a service is still working, lid closed
 /// included. Locked is not asleep: the display still turns off and locks, and everything keeps running.
+/// Unless `screenOn` keeps the display on too, the way a playing video does: then it never dims, the
+/// screen saver doesn't start and nothing locks until you lock it or close the lid.
 ///
 /// Two things put a Mac to sleep, and each needs its own switch:
 /// - Inactivity. A power assertion stops it, the same kind a browser holds while it plays audio
@@ -38,8 +40,11 @@ final class KeepAwake {
     /// Why it turned itself off, until it's turned on again.
     private(set) var stopReason: String?
     var isOn: Bool { since != nil }
+    /// While on, the display stays on too and the screen doesn't lock. Remembered between sessions.
+    private(set) var screenOn = UserDefaults.standard.bool(forKey: KeepAwake.screenOnKey)
 
     @ObservationIgnored private var assertion: IOPMAssertionID?
+    @ObservationIgnored private var screenAssertion: IOPMAssertionID?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var lidWasClosed = false
     /// This session turned `SleepDisabled` on (not someone before it) and must turn it off.
@@ -49,13 +54,22 @@ final class KeepAwake {
     /// Every change to the switch, in order: off then on again can't land as on then off.
     @ObservationIgnored private let queue = DispatchQueue(label: "runbar.keep-awake")
 
+    private static let screenOnKey = "coffeeKeepsScreenOn"
+
     func toggle() { isOn ? turnOff() : turnOn() }
+
+    func toggleScreen() {
+        screenOn.toggle()
+        UserDefaults.standard.set(screenOn, forKey: Self.screenOnKey)
+        holdScreen()
+    }
 
     #if DEBUG
     /// Demo shots only: shows coffee mode on, as if turned on at `since` with the lid covered, without
     /// holding an assertion or touching the sleep switch.
-    func showForDemo(since: Date?) {
+    func showForDemo(since: Date?, screenOn: Bool = false) {
         self.since = since
+        self.screenOn = screenOn
         lid = since == nil ? .none : .covered
         stopReason = nil
     }
@@ -81,6 +95,7 @@ final class KeepAwake {
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
+        holdScreen()
         coverLid()
     }
 
@@ -93,6 +108,7 @@ final class KeepAwake {
         stopReason = reason
         timer?.invalidate()
         timer = nil
+        holdScreen()
         guard ownsSwitch else { return }
         ownsSwitch = false
         let dog = watchdog
@@ -118,6 +134,32 @@ final class KeepAwake {
         guard LidSleep.owned else { return }
         queue.async {
             if LidSleep.disableSleep(false) { LidSleep.owned = false }
+        }
+    }
+
+    // MARK: - Screen
+
+    /// Holds the display assertion while on with `screenOn`, the one video players hold
+    /// (`PreventUserIdleDisplaySleep`): the display doesn't sleep, so the screen saver and the lock
+    /// that comes with it don't start either. Without it the display sleeps on its own timer and locks.
+    private func holdScreen() {
+        let want = isOn && screenOn
+        if want, screenAssertion == nil {
+            var id = IOPMAssertionID(0)
+            let result = IOPMAssertionCreateWithName(
+                kIOPMAssertPreventUserIdleDisplaySleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                "Runbar: keep the screen on" as CFString,
+                &id
+            )
+            if result == kIOReturnSuccess {
+                screenAssertion = id
+            } else {
+                NSLog("Runbar: couldn't keep the screen on (IOReturn \(result))")
+            }
+        } else if !want, let screenAssertion {
+            IOPMAssertionRelease(screenAssertion)
+            self.screenAssertion = nil
         }
     }
 
