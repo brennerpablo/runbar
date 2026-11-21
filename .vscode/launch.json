@@ -1,0 +1,44 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:runbar}",
+      "name": "Debug RunbarApp",
+      "target": "RunbarApp",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug RunbarApp"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:runbar}",
+      "name": "Release RunbarApp",
+      "target": "RunbarApp",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release RunbarApp"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:runbar}",
+      "name": "Debug runbar",
+      "target": "runbar",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug runbar"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:runbar}",
+      "name": "Release runbar",
+      "target": "runbar",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release runbar"
+    }
+  ]
+}
