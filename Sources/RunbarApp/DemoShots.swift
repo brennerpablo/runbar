@@ -51,7 +51,7 @@ enum DemoShots {
         if let redis = model.otherListeners.first(where: { $0.port == 6379 }) {
             written.append(render(alone(PopoverView(initialImport: redis).environment(model)), name: "panel-import", dir: dir, dark: true))
         }
-        KeepAwake.shared.showForDemo(since: Date().addingTimeInterval(-(2 * 3600 + 14 * 60)))
+        KeepAwake.shared.showForDemo(since: Date().addingTimeInterval(-(2 * 3600 + 14 * 60)), screenOn: true)
         written.append(render(alone(PopoverView().environment(model)), name: "panel-coffee", dir: dir, dark: true))
         KeepAwake.shared.showForDemo(since: nil)
         written += clipFrames(model, into: dir, alone: { AnyView(alone($0)) })
