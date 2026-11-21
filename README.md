@@ -40,8 +40,9 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
 ## Features
 
 **Services**
-- Start, stop and restart one service or a whole project. Services run in a login shell, in their own
-  process group, with their output in `~/Library/Logs/Runbar`.
+- Start, stop and restart one service or a whole project, and **Stop all** in the header stops every running
+  service. Services run in a login shell, in their own process group, with their output in
+  `~/Library/Logs/Runbar`.
 - Live status, real port, memory and CPU (the process and its children), with 30 minutes of history.
 - The detail view has the PID, uptime, last log, command, folder (open it in Finder, VS Code, a terminal…)
   and the live output.
@@ -56,12 +57,16 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
   your projects**, each with a command and a free port: **Add** writes it to config.json, × stops suggesting
   it. `runbar scan` lists the same from the Terminal.
 - Search stays out of the way until you press ⌘K, click the magnifier or just start typing a name or a port.
-- Runbar lives in the menu bar. **Show in Dock** (in ⋯) puts it in the Dock and the app switcher too, and a
-  click on the Dock icon opens the panel.
+- One button beside the filters closes every project card, or opens them all (**Collapse all**, **Expand
+  all**). The Disk tab has the same.
+- Runbar lives in the menu bar, and a right-click on its icon opens the ⋯ menu. **Show in Dock** (in ⋯) puts
+  it in the Dock and the app switcher too, and a click on the Dock icon opens the panel.
 
 **Ports**
 - A taken port says who holds it, with a one-click fix: stop that service, or end that process, and restart.
   Alerts gather under **Needs you** at the top of the panel, each with its fix beside it.
+- An alert you won't fix goes away with its ×, **Dismiss** in the detail or **Dismiss alert** on a
+  right-click: a crash counts as stopped, and something still true goes quiet until it changes.
 - With `autoPort`, a service whose port is taken starts on the next free one.
 - Services started outside Runbar (in Terminal, for example) are recognized by their folder.
 - Ports held by other processes are listed, and the menu bar icon flags alerts.
