@@ -4,3 +4,5 @@ build/
 *.xcodeproj/
 DerivedData/
 .DS_Store
+# Wallpapers for the README's screenshots (scripts/screenshots.sh): Apple's, not ours to publish.
+.wallpapers/

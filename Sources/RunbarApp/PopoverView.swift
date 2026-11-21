@@ -17,6 +17,9 @@ struct PopoverView: View {
     /// Screenshots: the "ports in use outside Runbar" card open, or a port being moved into Runbar.
     var initialShowOthers = false
     var initialImport: Listener?
+    /// Screenshots: the panel at this height whatever it shows, so shots side by side are the same window.
+    /// What doesn't fit is cut off at the bottom, like a list scrolled to the top.
+    var fixedHeight: CGFloat?
     @ViewState private var tab: PanelTab = .services
     @ViewState private var query = ""
     /// Search is closed until ⌘K, the magnifier or typing opens it in place of the header.
@@ -45,7 +48,7 @@ struct PopoverView: View {
                 list(theme)
             }
         }
-        .frame(width: Layout.width)
+        .frame(width: Layout.width, height: fixedHeight, alignment: .top)
         .rbPanel(theme)
         .environment(\.theme, theme)
         .onAppear {
@@ -127,6 +130,7 @@ struct PopoverView: View {
 
     /// The panel stays within a laptop's height: what sits above the list takes space from it.
     private func listMaxHeight(alerts: Int) -> CGFloat {
+        if let fixedHeight { return fixedHeight }
         var height: CGFloat = 500
         if KeepAwake.shared.isOn { height -= 42 }
         if alerts > 0 { height -= 40 + 51 * CGFloat(alerts) }

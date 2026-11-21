@@ -133,7 +133,8 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
 
 > [!NOTE]
 > **The screenshots use made-up projects** (Fellowship, Rivendell, Mordor, The Shire). `make screenshots`
-> redraws them from that demo data in `Sources/RunbarApp/DemoShots.swift`, which only debug builds include.
+> redraws them from that demo data in `Sources/RunbarApp/DemoShots.swift`, which only debug builds include,
+> over macOS Sequoia's wallpaper when it's in `.wallpapers/` (see `scripts/screenshots.sh`).
 
 ## Configure it with your agent
 

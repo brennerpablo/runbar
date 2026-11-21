@@ -16,10 +16,10 @@ enum DemoShots {
             let suffix = dark ? "dark" : "light"
             DiskModel.shared.confirming = nil
             written.append(render(hero(model), name: "hero-\(suffix)", dir: dir, dark: dark))
-            written.append(render(framed(PopoverView(initialSelection: "elrond-app").environment(model), dark: dark), name: "conflict-\(suffix)", dir: dir, dark: dark))
-            written.append(render(framed(PopoverView(initialSelection: "saruman-db").environment(model), dark: dark), name: "outside-\(suffix)", dir: dir, dark: dark))
+            written.append(render(framed(PopoverView(initialSelection: "elrond-app", fixedHeight: panelHeight).environment(model), dark: dark), name: "conflict-\(suffix)", dir: dir, dark: dark))
+            written.append(render(framed(PopoverView(initialSelection: "saruman-db", fixedHeight: panelHeight).environment(model), dark: dark), name: "outside-\(suffix)", dir: dir, dark: dark))
             DiskModel.shared.confirming = Self.path("fellowship/gandalf-app/node_modules")
-            written.append(render(framed(PopoverView(initialTab: .disk, initialQuery: "node_modules").environment(model), dark: dark), name: "reinstall-\(suffix)", dir: dir, dark: dark))
+            written.append(render(framed(PopoverView(initialTab: .disk, initialQuery: "node_modules", fixedHeight: panelHeight).environment(model), dark: dark), name: "reinstall-\(suffix)", dir: dir, dark: dark))
             DiskModel.shared.confirming = nil
             written.append(render(framed(agentWindow(model), dark: dark, radius: 12), name: "agent-\(suffix)", dir: dir, dark: dark))
         }
@@ -138,12 +138,16 @@ enum DemoShots {
 
     // MARK: - Layouts
 
+    /// Every panel in the README's shots is this tall, whatever it shows: side by side, and from one
+    /// shot to the next, they're the same window.
+    private static let panelHeight: CGFloat = 740
+
     /// The three main views side by side: services, a running service, disk.
     private static func hero(_ model: AppModel) -> some View {
         HStack(alignment: .top, spacing: 36) {
-            panel(PopoverView().environment(model))
-            panel(PopoverView(initialSelection: "gandalf-app").environment(model))
-            panel(PopoverView(initialTab: .disk).environment(model))
+            panel(PopoverView(fixedHeight: panelHeight).environment(model))
+            panel(PopoverView(initialSelection: "gandalf-app", fixedHeight: panelHeight).environment(model))
+            panel(PopoverView(initialTab: .disk, fixedHeight: panelHeight).environment(model))
         }
         .padding(56)
         .background(Wallpaper())
@@ -174,25 +178,46 @@ enum DemoShots {
             .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    /// A desktop behind the panels: dusk in dark mode, a clear sky in light mode.
+    /// Real wallpapers behind the panels, from the image files in `WALLPAPER_LIGHT` and `WALLPAPER_DARK`
+    /// (`make screenshots` passes them on; one alone serves both looks). Without them, `Wallpaper` draws one.
+    private static let wallpapers: (light: NSImage?, dark: NSImage?) = {
+        let env = ProcessInfo.processInfo.environment
+        let light = env["WALLPAPER_LIGHT"].flatMap { NSImage(contentsOfFile: Paths.expand($0)) }
+        let dark = env["WALLPAPER_DARK"].flatMap { NSImage(contentsOfFile: Paths.expand($0)) }
+        return (light ?? dark, dark ?? light)
+    }()
+
+    /// A desktop behind the panels: the wallpaper given, or else dusk in dark mode and a clear sky in light mode.
     private struct Wallpaper: View {
         @Environment(\.colorScheme) private var scheme
 
         var body: some View {
             GeometryReader { geo in
                 let size = geo.size
-                ZStack {
-                    if scheme == .dark {
-                        LinearGradient(colors: [rgb(0x172635), rgb(0x1F3446), rgb(0x2B4658)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        RadialGradient(colors: [rgb(0xECCE9E).opacity(0.85), rgb(0xD6AA80).opacity(0.4), .clear],
-                                       center: UnitPoint(x: 0.05, y: 1.05), startRadius: 0, endRadius: max(size.width, size.height) * 0.55)
-                        RadialGradient(colors: [rgb(0x568CA8).opacity(0.5), .clear],
-                                       center: UnitPoint(x: 1.05, y: 0.05), startRadius: 0, endRadius: max(size.width, size.height) * 0.5)
-                    } else {
-                        LinearGradient(colors: [rgb(0x8FB9E0), rgb(0xC3D9EE), rgb(0xECEFF3)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        RadialGradient(colors: [rgb(0xFFD6AA).opacity(0.9), .clear],
-                                       center: UnitPoint(x: 0.08, y: 1.02), startRadius: 0, endRadius: max(size.width, size.height) * 0.55)
-                    }
+                if let image = scheme == .dark ? DemoShots.wallpapers.dark : DemoShots.wallpapers.light {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
+                } else {
+                    drawn(size)
+                }
+            }
+        }
+
+        private func drawn(_ size: CGSize) -> some View {
+            ZStack {
+                if scheme == .dark {
+                    LinearGradient(colors: [rgb(0x172635), rgb(0x1F3446), rgb(0x2B4658)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    RadialGradient(colors: [rgb(0xECCE9E).opacity(0.85), rgb(0xD6AA80).opacity(0.4), .clear],
+                                   center: UnitPoint(x: 0.05, y: 1.05), startRadius: 0, endRadius: max(size.width, size.height) * 0.55)
+                    RadialGradient(colors: [rgb(0x568CA8).opacity(0.5), .clear],
+                                   center: UnitPoint(x: 1.05, y: 0.05), startRadius: 0, endRadius: max(size.width, size.height) * 0.5)
+                } else {
+                    LinearGradient(colors: [rgb(0x8FB9E0), rgb(0xC3D9EE), rgb(0xECEFF3)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    RadialGradient(colors: [rgb(0xFFD6AA).opacity(0.9), .clear],
+                                   center: UnitPoint(x: 0.08, y: 1.02), startRadius: 0, endRadius: max(size.width, size.height) * 0.55)
                 }
             }
         }
