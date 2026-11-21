@@ -237,6 +237,7 @@ flowchart LR
 | Menu bar icon and panel (drawn by the app, pinned under the icon) | `Sources/RunbarApp/StatusPanel.swift` |
 | Coffee mode: the assertion against idle sleep, the lid switch, and the battery and heat checks | `Sources/RunbarApp/KeepAwake.swift`, `LidSleep.swift` |
 | UI | `PopoverView.swift`, `ServiceDetailView.swift`, `DiskView.swift`, `AgentView.swift`, `Components.swift`, `Theme.swift` |
+| App icon: drawn in SwiftUI and written as `Resources/AppIcon.icns` (`make icon`) | `scripts/app-icon.swift` |
 
 SwiftUI's `@State` became a macro in the macOS 27 SDK and its plugin only ships with Xcode, so the views use
 `@ViewState` (`Sources/RunbarApp/ViewState.swift`), which does the same with the `State` type.

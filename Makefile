@@ -1,4 +1,4 @@
-.PHONY: build app install run clean screenshots
+.PHONY: build app install run clean screenshots icon
 
 build:
 	swift build
@@ -17,3 +17,7 @@ clean:
 
 screenshots:
 	scripts/screenshots.sh
+
+# The app icon, drawn by scripts/app-icon.swift. The .icns is committed, so a build doesn't redraw it.
+icon:
+	swift scripts/app-icon.swift Resources/AppIcon.icns
