@@ -249,7 +249,13 @@ SwiftUI's `@State` became a macro in the macOS 27 SDK and its plugin only ships 
 
 ## Install
 
-Needs macOS 15 or newer and the Command Line Tools (`xcode-select --install`); no Xcode.
+**Download** [Runbar.dmg](https://github.com/brennerpablo/runbar/releases/latest/download/Runbar.dmg) (Apple silicon,
+macOS 15 or newer) and drag Runbar to Applications. It isn't notarized yet, so the first time macOS blocks it: open
+System Settings › Privacy & Security and click **Open Anyway**, or run
+`xattr -dr com.apple.quarantine /Applications/Runbar.app`. Then **Install the runbar command** in ⋯ puts the CLI on
+your PATH.
+
+**From source**, with macOS 15 or newer and the Command Line Tools (`xcode-select --install`); no Xcode:
 
 ```bash
 make install   # builds, installs to ~/Applications, puts `runbar` on your PATH and opens the app
@@ -263,6 +269,7 @@ make install   # builds, installs to ~/Applications, puts `runbar` on your PATH 
 | `make install` | Builds `Runbar.app`, installs it to `~/Applications`, links `runbar` and opens it. Services keep running through the restart |
 | `make app` | Builds `build/Runbar.app` |
 | `make run` | Builds and opens `build/Runbar.app` |
+| `make dmg` | Builds `build/Runbar.dmg`, the download: the app and a link to Applications (Apple silicon, not notarized) |
 | `make build` | `swift build` (debug) |
 | `make screenshots` | Redraws `docs/assets/*.webp` from the demo data (needs `cwebp`: `brew install webp`) |
 | `make clean` | Deletes `.build` and `build` |
@@ -271,7 +278,7 @@ make install   # builds, installs to ~/Applications, puts `runbar` on your PATH 
 glass, light and dark) and the agent window to PNGs with your real data, without opening the socket or
 touching any service.
 
-To uninstall: quit Runbar, delete `~/Applications/Runbar.app` and the `runbar` link (in `/opt/homebrew/bin`,
+To uninstall: quit Runbar, delete `Runbar.app` (in `/Applications` or `~/Applications`) and the `runbar` link (in `/opt/homebrew/bin`,
 `/usr/local/bin` or `~/.local/bin`), and `sudo rm /etc/sudoers.d/runbar` if coffee mode installed it. The
 configuration lives in `~/.config/runbar`, the logs in `~/Library/Logs/Runbar`.
 

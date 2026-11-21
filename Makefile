@@ -1,4 +1,4 @@
-.PHONY: build app install run clean screenshots icon
+.PHONY: build app install run clean screenshots icon dmg
 
 build:
 	swift build
@@ -8,6 +8,10 @@ app:
 
 install:
 	scripts/build-app.sh --install
+
+# The app in a .dmg to download (GitHub Releases): Apple silicon, not notarized.
+dmg:
+	scripts/build-dmg.sh
 
 run: app
 	open build/Runbar.app
