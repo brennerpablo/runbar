@@ -52,6 +52,8 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
 - Projects with something running come first (`settings.activeProjectsFirst`, on by default, also in ⋯).
   The order is set when the panel opens, so nothing moves under the pointer.
 - Search stays out of the way until you press ⌘K, click the magnifier or just start typing a name or a port.
+- Runbar lives in the menu bar. **Show in Dock** (in ⋯) puts it in the Dock and the app switcher too, and a
+  click on the Dock icon opens the panel.
 
 **Ports**
 - A taken port says who holds it, with a one-click fix: stop that service, or end that process, and restart.

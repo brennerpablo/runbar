@@ -14,6 +14,8 @@ struct RunbarMain: App {
         }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
+        // In the Dock the app has a menu bar of its own: settings live in the panel's ⋯, not in a window.
+        .commands { CommandGroup(replacing: .appSettings) {} }
 
         // Without a second scene the Window would be the only one, and the app would quit with the agent window.
         Settings { EmptyView() }
@@ -40,11 +42,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
         AppModel.shared.start()
+        AppModel.shared.applyDockPolicy()
         StatusBarController.shared.install()
         // First disk measurement a little after launch, in the background, so the Disk tile has a number.
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
             MainActor.assumeIsolated { DiskModel.shared.scanIfStale() }
         }
+    }
+
+    /// With Show in Dock on, a click on the Dock icon opens the panel, as the menu bar icon does.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        let panel = StatusBarController.shared.panel
+        if !panel.isOpen { panel.open() }
+        return false
     }
 
     /// The app lives in the menu bar: closing the panel or the agent window quits nothing.

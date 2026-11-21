@@ -392,6 +392,7 @@ struct PopoverView: View {
             }
             .disabled(model.configError != nil)
             Toggle("Open at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
+            Toggle("Show in Dock", isOn: Binding(get: { model.showInDock }, set: { model.setShowInDock($0) }))
             Toggle("Active projects first", isOn: Binding(
                 get: { model.config.settings.activeProjectsFirst },
                 set: { model.setActiveProjectsFirst($0) }

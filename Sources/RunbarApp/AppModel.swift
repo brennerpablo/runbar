@@ -69,6 +69,8 @@ final class AppModel {
     private(set) var otherListeners: [Listener] = []
     private(set) var now = Date()
     private(set) var launchAtLogin = false
+    /// In the Dock and the app switcher too, not only in the menu bar. Remembered between launches.
+    private(set) var showInDock = UserDefaults.standard.bool(forKey: AppModel.showInDockKey)
     /// Alerts the user dismissed while their situation still holds, by service: the alert's key.
     private(set) var mutedAlerts: [String: String] = [:]
     /// launchd jobs behind ports held outside Runbar, by the PID that listens.
@@ -902,6 +904,19 @@ final class AppModel {
             NSLog("Runbar: login item: \(error)")
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    private static let showInDockKey = "showInDock"
+
+    func setShowInDock(_ on: Bool) {
+        showInDock = on
+        UserDefaults.standard.set(on, forKey: Self.showInDockKey)
+        applyDockPolicy()
+    }
+
+    /// `.accessory` keeps the app to the menu bar, as Info.plist's `LSUIElement` does at launch.
+    func applyDockPolicy() {
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
     }
 
     static let cliDirectories = ["/opt/homebrew/bin", "/usr/local/bin", Paths.home + "/.local/bin"]

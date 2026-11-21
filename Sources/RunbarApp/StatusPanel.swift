@@ -80,6 +80,7 @@ final class StatusBarController: NSObject {
         look.isEnabled = configOK
         menu.addItem(look)
         add("Open at login", #selector(toggleOpenAtLogin), on: model.launchAtLogin)
+        add("Show in Dock", #selector(toggleShowInDock), on: model.showInDock)
         add("Active projects first", #selector(toggleActiveFirst), on: model.config.settings.activeProjectsFirst, enabled: configOK)
         menu.addItem(.separator())
         add("Install the runbar command", #selector(installCLI))
@@ -102,6 +103,11 @@ final class StatusBarController: NSObject {
     @objc private func toggleOpenAtLogin() {
         let model = AppModel.shared
         model.setLaunchAtLogin(!model.launchAtLogin)
+    }
+
+    @objc private func toggleShowInDock() {
+        let model = AppModel.shared
+        model.setShowInDock(!model.showInDock)
     }
 
     @objc private func toggleActiveFirst() {
