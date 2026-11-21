@@ -31,6 +31,9 @@ struct PopoverView: View {
     @ViewState private var expandedReady = false
     @ViewState private var showOthers = false
     @ViewState private var showFound = false
+    /// The Disk tab's open projects, kept here for its Collapse all.
+    @ViewState private var diskExpanded: Set<String> = []
+    @ViewState private var diskOpened = false
     /// Project order, set each time the panel opens: a project that starts or stops doesn't move under the pointer.
     @ViewState private var order: [String] = []
     /// The port held outside Runbar being moved into it (its listener).
@@ -127,7 +130,7 @@ struct PopoverView: View {
                             if !isFiltering && !model.suggestions.isEmpty { foundSection(model.suggestions, t) }
                             if !model.otherListeners.isEmpty { othersSection(t) }
                         } else {
-                            DiskPanel(query: query)
+                            DiskPanel(query: query, expanded: $diskExpanded, opened: $diskOpened)
                         }
                     }
                     .padding(.horizontal, t.gutter)
@@ -487,6 +490,14 @@ struct PopoverView: View {
                 .foregroundStyle(Color.rbText3)
                 .lineLimit(1)
             Spacer(minLength: 8)
+            // A search opens every match, so there's nothing to fold then.
+            let measured = disk.projects.filter { $0.total > 0 }.map(\.id)
+            let anyOpen = measured.contains { diskExpanded.contains($0) }
+            if disk.hasMeasured && trimmedQuery.isEmpty && measured.count > 1 {
+                FoldAllButton(anyOpen: anyOpen) {
+                    withAnimation(.snappy(duration: 0.2)) { diskExpanded = anyOpen ? [] : Set(measured) }
+                }
+            }
             if disk.isScanning {
                 ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 26, height: 26)
             } else {
@@ -549,6 +560,10 @@ struct PopoverView: View {
         return HStack(alignment: .center, spacing: 6) {
             SegmentedFilter(selection: $filter, counts: statusCounts()).fixedSize()
             Spacer(minLength: 8)
+            // A search or filter opens every project with a match, so there's nothing to fold then.
+            if !isFiltering && foldableCount > 1 {
+                FoldAllButton(anyOpen: anyCardOpen, toggle: toggleAllCards)
+            }
             if running + proxies > 0 {
                 Button { model.stopAllServices() } label: {
                     HStack(spacing: 6) {
@@ -562,6 +577,27 @@ struct PopoverView: View {
                 .help(stopAllHelp(running: running, proxies: proxies))
                 .accessibilityLabel("Stop all running services")
             }
+        }
+    }
+
+    /// Cards the list opens and closes: the projects, services found in them and ports outside Runbar.
+    private var foldableCount: Int {
+        model.groups.count + (model.suggestions.isEmpty ? 0 : 1) + (model.otherListeners.isEmpty ? 0 : 1)
+    }
+
+    private var anyCardOpen: Bool {
+        model.groups.contains { expanded.contains($0.id) }
+            || (showFound && !model.suggestions.isEmpty)
+            || (showOthers && !model.otherListeners.isEmpty)
+    }
+
+    /// With any card open, close them all; with none open, open them all.
+    private func toggleAllCards() {
+        let open = !anyCardOpen
+        withAnimation(.snappy(duration: 0.2)) {
+            expanded = open ? Set(model.groups.map(\.id)) : []
+            showFound = open && !model.suggestions.isEmpty
+            showOthers = open && !model.otherListeners.isEmpty
         }
     }
 

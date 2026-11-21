@@ -98,6 +98,21 @@ struct DisclosureChevron: View {
     }
 }
 
+/// One click for every card in the list: with any open it closes them all, with none open it opens them all.
+struct FoldAllButton: View {
+    let anyOpen: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            Image(systemName: anyOpen ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
+        }
+        .buttonStyle(TextButtonStyle(size: 11.5))
+        .help(anyOpen ? "Collapse all" : "Expand all")
+        .accessibilityLabel(anyOpen ? "Collapse all" : "Expand all")
+    }
+}
+
 /// Runbar mark: the `>_` prompt from the menu bar icon.
 struct RunbarGlyph: View {
     var size: CGFloat = 16

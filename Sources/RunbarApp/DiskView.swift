@@ -7,9 +7,11 @@ import SwiftUI
 /// What dependencies and build output take in each project, with Clear / Reinstall / Delete.
 struct DiskPanel: View {
     let query: String
+    /// Open projects. The panel holds them, so its Collapse all reaches them and they stay put across tabs.
+    @Binding var expanded: Set<String>
+    /// The largest project has been opened, once.
+    @Binding var opened: Bool
     @Environment(\.theme) private var theme
-    @ViewState private var expanded: Set<String> = []
-    @ViewState private var opened = false
 
     var body: some View {
         let disk = DiskModel.shared
