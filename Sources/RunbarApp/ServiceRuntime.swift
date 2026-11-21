@@ -85,6 +85,8 @@ final class ServiceRuntime: Identifiable {
     private(set) var fallbackFrom: Int?
     var healthy: Bool?
     private(set) var external: ExternalRun?
+    /// When the user stopped the outside-Runbar run: it shows as stopping until the scan sees it gone.
+    private(set) var externalStopAt: Date?
     /// While waiting: the services from `needs` that aren't open yet.
     private(set) var waitingFor: [String] = []
 
@@ -569,9 +571,11 @@ final class ServiceRuntime: Identifiable {
     func applyExternal(root: Int32?, snap: ProcSnapshot) {
         guard let root, !isAlive else {
             if external != nil { external = nil }
+            if externalStopAt != nil { externalStopAt = nil }
             externalCPU = nil
             return
         }
+        if let e = external, e.rootPID != root, externalStopAt != nil { externalStopAt = nil }
         let pids = snap.descendants(of: root)
         var mem: UInt64 = 0
         var nanos: UInt64 = 0
@@ -597,7 +601,15 @@ final class ServiceRuntime: Identifiable {
     /// Stops a service that was started outside Runbar.
     func stopExternal() {
         guard let e = external else { return }
+        externalStopAt = Date()
         for p in e.pids { kill(p, SIGTERM) }
+    }
+
+    /// Stopping a run started outside Runbar, for at most 15 seconds: after that it ignored SIGTERM, and
+    /// the row goes back to showing it running.
+    var isStoppingExternal: Bool {
+        guard external != nil, let at = externalStopAt else { return false }
+        return Date().timeIntervalSince(at) < 15
     }
 
     /// A proxy's connections and holders from the latest scan, and the idle clock that follows from them.

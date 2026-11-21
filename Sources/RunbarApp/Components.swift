@@ -14,7 +14,7 @@ struct StatusDot: View {
             switch dot {
             case .running: filled(Color.rbLiveFill)
             case .warning, .error: filled(Color.rbWarnFill)
-            case .busy: Circle().strokeBorder(Color.rbWarnFill, lineWidth: ring)
+            case .busy: SpinnerArc(color: .rbWarnFill, lineWidth: ring, track: true)
             case .stopped: Circle().strokeBorder(Color.rbRing, lineWidth: ring)
             }
         }
@@ -28,6 +28,34 @@ struct StatusDot: View {
             Circle().fill(color).background(Circle().fill(color.opacity(0.18)).padding(-3))
         } else {
             Circle().fill(color)
+        }
+    }
+}
+
+/// A ring with an arc going round: something is between states (starting, stopping). Under Reduce Motion
+/// it stays still, a full ring.
+struct SpinnerArc: View {
+    var color: Color
+    var lineWidth: CGFloat = 1.5
+    /// A faint full ring under the arc, so the shape reads as the same dot it was.
+    var track = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if reduceMotion {
+            Circle().strokeBorder(color, lineWidth: lineWidth)
+        } else {
+            TimelineView(.animation) { context in
+                let turn = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 0.9) / 0.9
+                ZStack {
+                    if track { Circle().strokeBorder(color.opacity(0.3), lineWidth: lineWidth) }
+                    Circle()
+                        .inset(by: lineWidth / 2)
+                        .trim(from: 0, to: 0.62)
+                        .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .rotationEffect(.degrees(turn * 360))
+                }
+            }
         }
     }
 }

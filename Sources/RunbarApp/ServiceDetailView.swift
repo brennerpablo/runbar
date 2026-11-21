@@ -150,10 +150,10 @@ struct ServiceDetailView: View {
                     .help(url.absoluteString)
                 }
                 if d.isExternal {
-                    Button("Stop") { runtime.stopExternal() }.rbButton(theme)
+                    stopButton(d, "Stop") { runtime.stopExternal() }
                 } else {
-                    Button("Restart") { runtime.restart() }.rbButton(theme)
-                    Button("Close") { runtime.stop() }.rbButton(theme).disabled(runtime.phase == .stopping)
+                    Button("Restart") { runtime.restart() }.rbButton(theme).disabled(d.stopping)
+                    stopButton(d, "Close") { runtime.stop() }
                 }
             } else {
                 Button {
@@ -170,6 +170,22 @@ struct ServiceDetailView: View {
         .controlSize(.regular)
     }
 
+    /// Stop (or Close) that turns into a spinner and "Stopping…" once pressed, until the process is gone.
+    private func stopButton(_ d: ServiceDisplay, _ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if d.stopping {
+                HStack(spacing: 6) {
+                    SpinnerArc(color: .rbText2, lineWidth: 1.5).frame(width: 10, height: 10)
+                    Text(title == "Close" ? "Closing…" : "Stopping…")
+                }
+            } else {
+                Text(title)
+            }
+        }
+        .rbButton(theme)
+        .disabled(d.stopping)
+    }
+
     private func serviceActions(_ d: ServiceDisplay) -> some View {
         HStack(spacing: 8) {
             if let url = d.url, d.isAlive || d.isExternal {
@@ -184,10 +200,10 @@ struct ServiceDetailView: View {
                 .rbButton(theme, prominent: true)
             }
             if d.isExternal {
-                Button("Stop") { runtime.stopExternal() }.rbButton(theme)
+                stopButton(d, "Stop") { runtime.stopExternal() }
             } else if d.isAlive {
-                Button("Restart") { runtime.restart() }.rbButton(theme)
-                Button("Stop") { runtime.stop() }.rbButton(theme).disabled(runtime.phase == .stopping)
+                Button("Restart") { runtime.restart() }.rbButton(theme).disabled(d.stopping)
+                stopButton(d, "Stop") { runtime.stop() }
             } else {
                 Button {
                     runtime.start()

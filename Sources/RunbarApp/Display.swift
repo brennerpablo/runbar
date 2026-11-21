@@ -28,6 +28,10 @@ struct ServiceDisplay {
     var isAlive = false
     var isExternal = false
     var isProxy = false
+    /// Between states (starting, stopping, waiting): what it's doing, in a few words ("stopping…").
+    var busyText: String?
+    /// The stop was sent and it hasn't exited yet: stopping again does nothing.
+    var stopping = false
     var memory: UInt64?
     var cpu: Double?
     /// Proxies: connections open now (nil when closed).
@@ -106,6 +110,7 @@ extension AppModel {
             d.statusLabel = proxy ? "Opening" : "Starting"
             d.portLabel = (rt.realPort ?? rt.expectedPort).map { ":\($0)" }
             d.subtitle = proxy ? "opening…" : "starting…"
+            d.busyText = d.subtitle
             if let active = rt.activePort, let from = rt.fallbackFrom {
                 d.subtitle = "starting on :\(active) · :\(from) was taken"
             } else if let port, let owner = blocker(of: port), cfg.type != .docker {
@@ -172,6 +177,8 @@ extension AppModel {
             d.action = .stop
             d.statusLabel = proxy ? "Closing" : "Stopping"
             d.subtitle = proxy ? "closing…" : "stopping…"
+            d.busyText = d.subtitle
+            d.stopping = true
             d.portLabel = port.map { ":\($0)" }
 
         case .stopped where rt.external != nil:
@@ -198,6 +205,18 @@ extension AppModel {
                 : "This service was started outside Runbar (in Terminal, for example). Runbar shows its port, memory and CPU, but not its output. Stop it and start it from Runbar to follow its logs."
             d.fix = .takeOverExternal
             d.fixLabel = proxy ? "Stop and open from Runbar" : "Stop and start from Runbar"
+            if rt.isStoppingExternal {
+                d.dot = .busy
+                d.stopping = true
+                d.statusLabel = "Stopping"
+                d.busyText = "stopping…"
+                d.subtitle = "stopping · outside Runbar"
+                d.warn = false
+                d.alert = false
+                d.fix = nil
+                d.fixLabel = nil
+                d.url = nil
+            }
 
         case .stopped:
             d.action = .start

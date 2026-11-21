@@ -961,11 +961,20 @@ private struct ServiceRow: View {
                 Color.clear.frame(width: Layout.pillWidth, height: 1)
             }
 
-            Button { model.toggle(runtime.id) } label: { Image(systemName: d.actionSymbol) }
-                .buttonStyle(RowActionButtonStyle(tone: actionTone(d), size: Layout.rowAction))
-                .help(actionHelp(d))
-                .accessibilityLabel(actionHelp(d))
+            Button { model.toggle(runtime.id) } label: {
+                if d.stopping {
+                    SpinnerArc(color: .rbText2, lineWidth: 1.5).frame(width: 9, height: 9)
+                } else {
+                    Image(systemName: d.actionSymbol)
+                }
+            }
+            .buttonStyle(RowActionButtonStyle(tone: actionTone(d), size: Layout.rowAction))
+            .disabled(d.stopping)
+            .help(actionHelp(d))
+            .accessibilityLabel(actionHelp(d))
         }
+        .animation(.easeOut(duration: 0.18), value: d.dot)
+        .animation(.easeOut(duration: 0.18), value: d.stopping)
         .padding(.leading, Self.inset)
         .padding(.trailing, 7)
         .frame(height: note == nil ? Layout.compactRow : Layout.rowHeight)
@@ -994,16 +1003,12 @@ private struct ServiceRow: View {
     /// Memory, a proxy's connections, or what a service in motion is doing.
     @ViewBuilder
     private func metric(_ d: ServiceDisplay) -> some View {
-        let busy: String? = switch runtime.phase {
-        case .starting: d.isProxy ? "opening…" : "starting…"
-        case .stopping: d.isProxy ? "closing…" : "stopping…"
-        default: nil
-        }
-        if let busy {
+        if let busy = d.busyText {
             Text(busy)
                 .font(.system(size: 11))
                 .foregroundStyle(Color.rbText3)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         } else if d.isProxy, let connections = d.connections {
             Text("\(connections) conn")
                 .font(.system(size: 11, design: .monospaced))
@@ -1031,6 +1036,7 @@ private struct ServiceRow: View {
 
     private func actionHelp(_ d: ServiceDisplay) -> String {
         if runtime.phase == .waiting { return "Don't start \(runtime.id)" }
+        if d.stopping { return d.isProxy ? "Closing \(runtime.id)…" : "Stopping \(runtime.id)…" }
         switch d.action {
         case .start: return d.isProxy ? "Open \(runtime.id)" : "Start \(runtime.id)"
         case .stop: return d.isProxy ? "Close \(runtime.id)" : "Stop \(runtime.id)"
