@@ -296,12 +296,10 @@ struct PopoverView: View {
             .accessibilityAddTraits(.isToggle)
     }
 
-    /// While coffee mode is on: what it covers, for how long, and the way to turn it off.
+    /// While coffee mode is on: what it covers and the way to turn it off.
     private func coffeeStrip(_ awake: KeepAwake, _ t: Theme) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        // `model.now` ticks every 2 s and redraws this; the wall clock keeps it exact.
-        let elapsed = awake.since.map { Format.duration(max(model.now, Date()).timeIntervalSince($0)) } ?? ""
-        // How long first: it's what changes. The lid's state only when there is a lid.
+        // The lid's state only when there is a lid.
         let lid: String
         switch awake.lid {
         case .none: lid = ""
@@ -312,9 +310,8 @@ struct PopoverView: View {
         return HStack(spacing: 8) {
             Image(systemName: "cup.and.heat.waves.fill")
                 .font(.system(size: 11.5, weight: .semibold))
-            Text("\(Text("Coffee mode").fontWeight(.semibold)) · \(elapsed)\(lid)")
+            Text("\(Text("Coffee mode").fontWeight(.semibold))\(lid)")
                 .font(.system(size: 12))
-                .monospacedDigit()
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
