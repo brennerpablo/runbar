@@ -75,6 +75,10 @@ final class AppModel {
     private(set) var mutedAlerts: [String: String] = [:]
     /// launchd jobs behind ports held outside Runbar, by the PID that listens.
     private(set) var launchdJobs: [Int32: LaunchdJob] = [:]
+    /// Development servers in the projects' folders that config.json doesn't run, ignored ones included.
+    private(set) var found: [FoundService] = []
+    /// Found services the user doesn't want suggested, by id.
+    private(set) var ignoredFound: Set<String> = FoundIgnores.load()
 
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var control: ControlServer?
@@ -90,6 +94,10 @@ final class AppModel {
     @ObservationIgnored private let scanQueue = DispatchQueue(label: "runbar.scan", qos: .utility)
     /// The listening PIDs the last launchd lookup covered: it runs again only when they change.
     @ObservationIgnored private var launchdScannedFor: Set<Int32> = []
+    @ObservationIgnored private var findingServices = false
+    /// The config the last look through the project folders was for, and when it finished.
+    @ObservationIgnored private var foundFor: RunbarConfig?
+    @ObservationIgnored private var foundAt: Date?
 
     /// Used by --snapshot mode to draw both looks.
     var lookOverride: LookSetting?
@@ -101,6 +109,7 @@ final class AppModel {
     func prepareForSnapshot() {
         snapshotMode = true
         reloadConfig(force: true)
+        found = ServiceFinder.find(in: config)
         adoptFromState()
         for _ in 0..<4 {
             apply(ProcSnapshot.take(), forceHistory: true)
@@ -170,6 +179,7 @@ final class AppModel {
             configError = nil
             configWarnings = result.warnings
             syncRuntimes()
+            findServices()
         } else {
             configError = result.errors.first
         }
@@ -437,6 +447,62 @@ final class AppModel {
         }
     }
 
+    // MARK: - Services found in the project folders
+
+    /// What the panel suggests adding: found and not ignored.
+    var suggestions: [FoundService] { found.filter { !ignoredFound.contains($0.id) } }
+
+    /// Found services the user ignored that are still there.
+    var ignoredSuggestionCount: Int { found.filter { ignoredFound.contains($0.id) }.count }
+
+    /// Looks through the project folders again, in the background, when the config changed since the last
+    /// look or it is older than `maxAge` (a folder cloned since then shows up).
+    func findServices(maxAge: TimeInterval = 300) {
+        guard !snapshotMode, !findingServices else { return }
+        if foundFor == config, let foundAt, Date().timeIntervalSince(foundAt) < maxAge { return }
+        findingServices = true
+        let cfg = config
+        DispatchQueue.global(qos: .utility).async {
+            let result = ServiceFinder.find(in: cfg)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.findingServices = false
+                    self.foundFor = cfg
+                    self.foundAt = Date()
+                    if result != self.found { self.found = result }
+                    // The config changed while looking: what it runs now may cover some of these.
+                    if cfg != self.config { self.findServices() }
+                }
+            }
+        }
+    }
+
+    /// Adds a found service to config.json as suggested. Returns what went wrong, or nil.
+    func add(_ item: FoundService) -> String? {
+        guard configError == nil else { return "config.json has an error; fix it first." }
+        guard config.projects.contains(where: { $0.id == item.projectID }) else { return "\(item.projectName) isn't in config.json anymore." }
+        guard config.service(item.name) == nil else { return "There's already a service called \(item.name)." }
+        do {
+            try ConfigEditor.set(.object(item.entry), at: ["projects", item.projectID, "services", item.name])
+        } catch {
+            return "Couldn't write config.json: \(error.localizedDescription)"
+        }
+        found.removeAll { $0.id == item.id }
+        reloadConfig(force: true)
+        return nil
+    }
+
+    /// Stops suggesting it. Remembered between launches; `unignoreFound` brings them all back.
+    func ignore(_ item: FoundService) {
+        ignoredFound.insert(item.id)
+        FoundIgnores.save(ignoredFound)
+    }
+
+    func unignoreFound() {
+        ignoredFound = []
+        FoundIgnores.save([])
+    }
+
     /// Runs the tool's sign-in command in Terminal. When its credentials file changes, the proxy tries again.
     func signIn(for rt: ServiceRuntime) {
         guard let command = rt.config.proxyTool.signInCommand else { return }
@@ -487,6 +553,7 @@ final class AppModel {
 
     func refresh() {
         reloadConfig(force: true)
+        findServices(maxAge: 0)
         tick()
     }
 
@@ -502,6 +569,7 @@ final class AppModel {
             runHealthChecks()
             checkSignIns()
         }
+        if tickCount % 30 == 0 { findServices() }
         guard !scanning else { return }
         scanning = true
         scanQueue.async {

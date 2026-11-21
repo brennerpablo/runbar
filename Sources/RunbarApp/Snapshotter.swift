@@ -20,6 +20,9 @@ enum Snapshotter {
                 let glass = look == .glass
                 written.append(render(backdrop(PopoverView().environment(model), glass: glass, dark: dark), name: "list-\(suffix)", dir: dir, dark: dark))
                 written.append(render(backdrop(PopoverView(initialTab: .disk).environment(model), glass: glass, dark: dark), name: "disk-\(suffix)", dir: dir, dark: dark))
+                if !model.suggestions.isEmpty {
+                    written.append(render(backdrop(PopoverView(initialShowFound: true).environment(model), glass: glass, dark: dark), name: "found-\(suffix)", dir: dir, dark: dark))
+                }
                 if let detailID {
                     written.append(render(backdrop(PopoverView(initialSelection: detailID).environment(model), glass: glass, dark: dark), name: "detail-\(suffix)", dir: dir, dark: dark))
                 }

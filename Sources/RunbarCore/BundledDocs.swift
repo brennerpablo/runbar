@@ -310,6 +310,13 @@ General settings (optional):
 
 ## Finding services in a folder
 
+`runbar scan` lists the development servers Runbar finds in the projects' folders
+that config.json doesn't run yet, each with an id, a command and a free port, as
+JSON ready to paste under the project's `services` (`--json` for the whole list).
+Start from it, check each against the project's README, and skip the ones that
+aren't servers. A project that isn't in the file yet isn't scanned: add it with
+its `root` first. What to look for:
+
 - `package.json` with a `dev` script → `npm run dev` (`pnpm dev` if there is a
   `pnpm-lock.yaml`, `yarn dev` with `yarn.lock`, `bun dev` with `bun.lockb`).
   If the `next` dependency is present, `type: "nextjs"`.
@@ -330,6 +337,7 @@ The app installs the `runbar` command (⋯ menu → Install the runbar command).
 
 ```
 runbar validate [--json]        check config.json (line and column of each error)
+runbar scan [--all] [--json]    dev servers in the projects' folders not in config.json
 runbar status [--json]          status, real port, memory and CPU of each service
 runbar start <id> [--wait]      start a service (--wait waits for the port to open)
 runbar stop <id>                stop the service and its child processes

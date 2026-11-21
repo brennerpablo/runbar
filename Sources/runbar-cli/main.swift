@@ -8,6 +8,7 @@ runbar \(RunbarInfo.version) — control Runbar from the Terminal
 
 usage:
   runbar validate [file] [--json]      check config.json (line and column of each error)
+  runbar scan [--all] [--json]         dev servers in the projects' folders that config.json doesn't run
   runbar status [--json]               status, real port, memory and CPU of each service
   runbar start <id> [--wait]           start a service (--wait waits for the port to open)
   runbar stop <id>                     stop the service and its child processes
@@ -91,6 +92,48 @@ case "validate":
         }
     }
     exit(result.config == nil ? 1 : 0)
+
+case "scan":
+    let result = ConfigLoader.load()
+    guard let config = result.config else {
+        fail("config.json has an error: \(result.errors.first?.description ?? "unknown"). Run runbar validate.")
+    }
+    let ignored = FoundIgnores.load()
+    let all = ServiceFinder.find(in: config)
+    let shown = flags.contains("--all") ? all : all.filter { !ignored.contains($0.id) }
+    let hidden = all.count - shown.count
+    if flags.contains("--json") {
+        struct Entry: Encodable { var cwd: String?; var type: String; var command: String; var stop: String?; var port: Int? }
+        struct Found: Encodable {
+            var id, project, folder, framework, source: String
+            var note: String?
+            var ignored: Bool
+            /// What goes under projects.<project>.services.<id> in config.json.
+            var config: Entry
+        }
+        printJSON(shown.map { f in
+            Found(id: f.name, project: f.projectID, folder: f.cwd, framework: f.framework, source: f.source, note: f.note,
+                  ignored: ignored.contains(f.id),
+                  config: Entry(cwd: f.folder.isEmpty ? nil : f.folder, type: f.type.rawValue, command: f.command, stop: f.stop, port: f.port))
+        })
+        exit(0)
+    }
+    let ignoredNote = hidden == 0 ? "" : " (\(hidden) ignored in the app; --all shows them)"
+    if shown.isEmpty {
+        print("Nothing new: config.json runs every development server Runbar found in the projects' folders\(ignoredNote).")
+        exit(0)
+    }
+    for f in shown {
+        let where_ = f.folder.isEmpty ? f.projectName : "\(f.projectName) / \(f.folder)"
+        print("\(f.projectID) › \(f.name)  \(f.framework), in \(where_), from \(f.source)\(ignored.contains(f.id) ? " (ignored)" : "")")
+        if let note = f.note { print("  ! \(note)") }
+        // `"id": { … }`, ready to paste under the project's services.
+        var wrapper = JSONObject()
+        wrapper[f.name] = .object(f.entry)
+        for line in JSON.object(wrapper).prettyPrinted().split(separator: "\n").dropFirst().dropLast() { print(line) }
+        print()
+    }
+    print("Add one from Runbar's panel, or under projects.<project>.services in config.json\(ignoredNote).")
 
 case "status":
     guard ControlClient.ping() else {

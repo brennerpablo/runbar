@@ -17,6 +17,8 @@ struct PopoverView: View {
     /// Screenshots: the "ports in use outside Runbar" card open, or a port being moved into Runbar.
     var initialShowOthers = false
     var initialImport: Listener?
+    /// Screenshots: the card of services found in the project folders open, the projects closed.
+    var initialShowFound = false
     /// Screenshots: the panel at this height whatever it shows, so shots side by side are the same window.
     /// What doesn't fit is cut off at the bottom, like a list scrolled to the top.
     var fixedHeight: CGFloat?
@@ -28,6 +30,7 @@ struct PopoverView: View {
     @ViewState private var expanded: Set<String> = []
     @ViewState private var expandedReady = false
     @ViewState private var showOthers = false
+    @ViewState private var showFound = false
     /// Project order, set each time the panel opens: a project that starts or stops doesn't move under the pointer.
     @ViewState private var order: [String] = []
     /// The port held outside Runbar being moved into it (its listener).
@@ -62,6 +65,11 @@ struct PopoverView: View {
                 searching = true
             }
             if initialShowOthers { showOthers = true }
+            if initialShowFound {
+                // Projects closed, so the card is in view.
+                showFound = true
+                expanded = []
+            }
             if let initialImport { importing = initialImport }
         }
         .onChange(of: model.config.settings.activeProjectsFirst) { settleOrder() }
@@ -116,6 +124,7 @@ struct PopoverView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         if tab == .services {
                             groupsList(t)
+                            if !isFiltering && !model.suggestions.isEmpty { foundSection(model.suggestions, t) }
                             if !model.otherListeners.isEmpty { othersSection(t) }
                         } else {
                             DiskPanel(query: query)
@@ -277,6 +286,7 @@ struct PopoverView: View {
         events.opened = {
             if searching { closeSearch() }
             settleOrder()
+            model.findServices(maxAge: 30)
         }
         events.openAgent = { openAgentWindow() }
     }
@@ -402,6 +412,10 @@ struct PopoverView: View {
                 set: { model.setActiveProjectsFirst($0) }
             ))
             .disabled(model.configError != nil)
+            if model.ignoredSuggestionCount > 0 {
+                let n = model.ignoredSuggestionCount
+                Button(n == 1 ? "Suggest the ignored service again" : "Suggest the \(n) ignored services again") { model.unignoreFound() }
+            }
             Divider()
             Button("Install the runbar command") { _ = model.installCLI() }
             Button("Show config folder") { model.revealConfigDir() }
@@ -661,6 +675,42 @@ struct PopoverView: View {
         .padding(.top, 26)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity)
+        .rbCard(t)
+    }
+
+    /// Development servers in the project folders that config.json doesn't run yet, each a click from being added.
+    private func foundSection(_ items: [FoundService], _ t: Theme) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) { showFound.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    DisclosureChevron(open: showFound)
+                    Text(items.count == 1 ? "1 service found in your projects" : "\(items.count) services found in your projects")
+                        .font(.system(size: 12))
+                    Spacer()
+                }
+                .padding(.horizontal, Layout.rowInset)
+                .frame(height: 38)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Development servers in your project folders that config.json doesn't run yet")
+            .accessibilityHint(showFound ? "Collapse" : "Expand")
+
+            if showFound {
+                VStack(spacing: 0) {
+                    ForEach(items) { item in
+                        FoundRow(item: item) {
+                            withAnimation(.snappy(duration: 0.2)) { _ = expanded.insert(item.projectID) }
+                        }
+                    }
+                }
+                .padding(.leading, Layout.rowInset)
+                .padding(.trailing, 7)
+                .padding(.bottom, 6)
+            }
+        }
         .rbCard(t)
     }
 
@@ -1074,6 +1124,82 @@ private struct ServiceRow: View {
         case .stop: return d.isProxy ? "Close \(runtime.id)" : "Stop \(runtime.id)"
         case .retry: return d.isProxy ? "Try opening \(runtime.id) again" : "Try starting \(runtime.id) again"
         }
+    }
+}
+
+// MARK: - Found in the project folders
+
+/// A service found in a project's folder: what it is and where, its port, Add and ignore. The tooltip has the
+/// command it would run.
+private struct FoundRow: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.theme) private var theme
+    let item: FoundService
+    /// After it's in config.json: shows it in its project.
+    let added: () -> Void
+    @ViewState private var error: String?
+
+    var body: some View {
+        let warn = error != nil || item.note != nil
+        HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                ServiceIcon(config: item.asService, dot: .stopped)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(error ?? subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(warn ? Color.rbWarn : Color.rbText2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+            .help(help)
+            .accessibilityElement(children: .combine)
+            .contextMenu {
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: item.cwd)]) }
+                Button("Copy command") { Pasteboard.copy(item.command) }
+            }
+
+            if let port = item.port { Pill(text: ":\(port)") }
+            Button("Add") {
+                error = model.add(item)
+                if error == nil { added() }
+            }
+            .buttonStyle(RBButtonStyle(prominent: true))
+            .controlSize(.small)
+            .fixedSize()
+            .disabled(model.configError != nil)
+            .help("Add \(item.name) to \(item.projectName) in config.json")
+            .accessibilityLabel("Add \(item.name)")
+            Button {
+                withAnimation(.snappy(duration: 0.2)) { model.ignore(item) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(Color.rbText2)
+                    .frame(width: 22, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Ignore: don't suggest \(item.name) again")
+            .accessibilityLabel("Ignore \(item.name)")
+        }
+        .frame(minHeight: 44)
+    }
+
+    /// "FastAPI · fundsys-analytics-get-data", or what's missing before it runs.
+    private var subtitle: String {
+        if let note = item.note { return "\(item.framework) · \(note)" }
+        return "\(item.framework) · \(item.folder.isEmpty ? item.projectName : item.folder)"
+    }
+
+    private var help: String {
+        [item.command, "in \(Paths.abbreviate(item.cwd))", "Found from \(item.source), in \(item.projectName)"].joined(separator: "\n")
     }
 }
 

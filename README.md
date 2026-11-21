@@ -51,6 +51,10 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
   database or the framework in `package.json`. Brand marks from [Simple Icons](https://simpleicons.org) (CC0).
 - Projects with something running come first (`settings.activeProjectsFirst`, on by default, also in ⋯).
   The order is set when the panel opens, so nothing moves under the pointer.
+- Runbar looks through each project's folder for dev servers config.json doesn't run yet (a `dev` script in
+  `package.json`, a FastAPI, Flask or Django app, a compose file) and lists them under **services found in
+  your projects**, each with a command and a free port: **Add** writes it to config.json, × stops suggesting
+  it. `runbar scan` lists the same from the Terminal.
 - Search stays out of the way until you press ⌘K, click the magnifier or just start typing a name or a port.
 - Runbar lives in the menu bar. **Show in Dock** (in ⋯) puts it in the Dock and the app switcher too, and a
   click on the Dock icon opens the panel.
@@ -187,6 +191,7 @@ frodo-site              stopped         :4321   —         —
 | Command | What it does |
 |---|---|
 | `runbar validate [file] [--json]` | Checks config.json (line and column of each error) |
+| `runbar scan [--all] [--json]` | Dev servers in the projects' folders that config.json doesn't run, ready to paste (`--all` includes the ignored ones) |
 | `runbar status [--json]` | Status, real port, memory and CPU of each service |
 | `runbar start <id> [--wait]` | Starts a service (`--wait` waits for the port to open) |
 | `runbar stop <id>` | Stops the service and its child processes |
