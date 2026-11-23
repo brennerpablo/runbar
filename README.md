@@ -281,7 +281,7 @@ your PATH.
 **From source**, with macOS 15 or newer and the Command Line Tools (`xcode-select --install`); no Xcode:
 
 ```bash
-make install   # builds, installs to ~/Applications, puts `runbar` on your PATH and opens the app
+make install   # builds, installs to /Applications, puts `runbar` on your PATH and opens the app
 ```
 
 <details>
@@ -289,7 +289,7 @@ make install   # builds, installs to ~/Applications, puts `runbar` on your PATH 
 
 | Target | What it does |
 |---|---|
-| `make install` | Builds `Runbar.app`, installs it to `~/Applications`, links `runbar` and opens it. Services keep running through the restart |
+| `make install` | Builds `Runbar.app`, installs it to `/Applications` (`~/Applications` if that isn't writable), links `runbar` and opens it. Services keep running through the restart |
 | `make app` | Builds `build/Runbar.app` |
 | `make run` | Builds and opens `build/Runbar.app` |
 | `make dmg` | Builds `build/Runbar.dmg`, the download: the app and a link to Applications (Apple silicon, not notarized) |

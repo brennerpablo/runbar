@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds Runbar and assembles build/Runbar.app.
 #   scripts/build-app.sh            build only
-#   scripts/build-app.sh --install  install to ~/Applications, link the `runbar` command and open the app
+#   scripts/build-app.sh --install  install to /Applications, link the `runbar` command and open the app
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -48,8 +48,11 @@ codesign --force --sign - "$APP" >/dev/null
 echo "✓ $APP"
 
 if [[ "${1:-}" == "--install" ]]; then
-  DEST="$HOME/Applications/Runbar.app"
-  mkdir -p "$HOME/Applications"
+  # /Applications, where the download goes too, so there's one copy; ~/Applications if it isn't writable.
+  APPS="/Applications"
+  [[ -w "$APPS" ]] || APPS="$HOME/Applications"
+  DEST="$APPS/Runbar.app"
+  mkdir -p "$APPS"
   # Plain SIGTERM: the app quits without stopping services, and the new process re-adopts them all.
   pkill -x Runbar 2>/dev/null && sleep 1 || true
   rm -rf "$DEST"
