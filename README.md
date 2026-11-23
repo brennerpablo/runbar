@@ -73,6 +73,18 @@ a `runbar` command lets you, and your agent, start, stop and read logs from the 
 - A port held by a LaunchAgent with `KeepAlive` says so (Kill wouldn't stick), and can be turned off or moved
   into Runbar.
 
+**Local addresses**
+- Each service with a port also answers at `http://<id>.localhost` (or the name in its `host`), whatever port
+  it runs on. The browser keeps saved passwords and cookies per address, so autoPort moving a service doesn't
+  lose them, and two apps stop sharing `localhost`'s cookies.
+- Runbar listens on port 80 of the loopback interface, without root, and passes each request through untouched,
+  WebSockets (hot reload) included. `.localhost` names reach the Mac on their own: no `/etc/hosts`.
+- `{url}` and `{host}` in a command or `env` become the address (`"BETTER_AUTH_URL": "{url}"`), for apps that
+  check their own URL. `http://localhost` lists every address, and a stopped service's address shows a page
+  that loads the app once it's up.
+- If port 80 is taken, the panel says by whom and Runbar tries again on its own; `settings.hostPort` picks
+  another port, `"host": false` turns one service's address off.
+
 **Proxies**
 - Cloud SQL proxies, `kubectl port-forward` and SSH tunnels as services with `"type": "proxy"`: they open when a
   service that `needs` them starts, and close after `idle` (15 minutes by default) with no connections.
@@ -170,7 +182,7 @@ ready-made request: paste it into your agent and it scans your folders and write
 }
 ```
 
-The full format, with `env`, `envFile`, `health`, `autostart`, `autoPort` and `install`, is in
+The full format, with `env`, `envFile`, `health`, `autostart`, `autoPort`, `host` and `install`, is in
 [`Sources/RunbarCore/BundledDocs.swift`](Sources/RunbarCore/BundledDocs.swift), the same text the app writes
 to `~/.config/runbar/README.md`. `runbar validate` points to each error by line and column.
 
@@ -197,7 +209,7 @@ frodo-site              stopped         :4321   —         —
 |---|---|
 | `runbar validate [file] [--json]` | Checks config.json (line and column of each error) |
 | `runbar scan [--all] [--json]` | Dev servers in the projects' folders that config.json doesn't run, ready to paste (`--all` includes the ignored ones) |
-| `runbar status [--json]` | Status, real port, memory and CPU of each service |
+| `runbar status [--json]` | Status, real port, local address, memory and CPU of each service |
 | `runbar start <id> [--wait]` | Starts a service (`--wait` waits for the port to open) |
 | `runbar stop <id>` | Stops the service and its child processes |
 | `runbar restart <id> [--wait]` | Restarts a service |
@@ -243,6 +255,7 @@ flowchart LR
 | Processes: tree, memory (phys_footprint), CPU, LISTEN ports, loopback connections, folder | `Sources/RunbarCore/ProcScanner.swift` (libproc) |
 | Proxies: known tools, sign-in errors, `idle`; launchd jobs behind a port | `Sources/RunbarCore/Proxy.swift`, `Launchd.swift` |
 | Starting a service: login shell, its own process group, output to the log file | `Sources/RunbarCore/Spawner.swift` |
+| Local addresses: the `*.localhost` proxy on port 80 and its pages | `Sources/RunbarCore/LocalHosts.swift` |
 | Disk: measuring, reinstall commands, guarded deletes | `Sources/RunbarCore/DiskScanner.swift`, `Sources/RunbarApp/DiskModel.swift` |
 | Unix socket between the CLI and the app | `Sources/RunbarCore/Control.swift` |
 | Each service's state, re-adoption, automatic restart | `Sources/RunbarApp/ServiceRuntime.swift` |

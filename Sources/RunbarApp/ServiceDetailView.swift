@@ -85,6 +85,15 @@ struct ServiceDetailView: View {
             Text("\(runtime.config.projectName) · \(isProxy ? runtime.config.proxyTool.label : runtime.config.type.label)")
                 .font(.system(size: 12))
                 .foregroundStyle(Color.rbText2)
+            if let host = runtime.config.host, let address = runtime.config.hostURL {
+                // The address the browser keeps (passwords, cookies), whatever port the service lands on.
+                Text(host)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(model.hostsProblem == nil ? Color.rbText2 : Color.rbWarn)
+                    .textSelection(.enabled)
+                    .help(model.hostsReady ? "\(address) reaches this service on whatever port it runs" : "Not answering: \(model.hostsProblem ?? "the .localhost addresses are off")")
+                    .padding(.top, 1)
+            }
         }
     }
 

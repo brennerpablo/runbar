@@ -449,7 +449,7 @@ final class ServiceRuntime: Identifiable {
 
     private func runStopCommand(_ command: String) {
         let shell = model?.config.settings.shell ?? "/bin/zsh"
-        let resolved = command.replacingOccurrences(of: "{port}", with: expectedPort.map(String.init) ?? "")
+        let resolved = config.expand(command, port: expectedPort).replacingOccurrences(of: "{port}", with: "")
         guard let helper = try? Spawner.spawn(shell: shell, command: resolved, cwd: config.cwd, environment: environment(port: expectedPort), logPath: logURL.path) else { return }
         let src = DispatchSource.makeProcessSource(identifier: helper, eventMask: .exit, queue: .main)
         src.setEventHandler { [weak self, weak src] in
@@ -524,7 +524,7 @@ final class ServiceRuntime: Identifiable {
         for key in ["__CFBundleIdentifier", "XPC_SERVICE_NAME", "XPC_FLAGS", "TERM_SESSION_ID", "OLDPWD", "PWD"] { env[key] = nil }
         if let p = port ?? config.port { env["PORT"] = String(p) }
         if let f = config.envFile { env.merge(Spawner.parseEnvFile(f)) { _, new in new } }
-        env.merge(config.env) { _, new in new }
+        env.merge(config.env.mapValues { config.expand($0, port: port) }) { _, new in new }
         env["RUNBAR_SERVICE"] = config.id
         return env
     }

@@ -42,6 +42,18 @@ public enum BundledDocs {
           "type": "boolean",
           "default": true,
           "description": "List projects with something running before the others in the panel. The others keep their order from this file."
+        },
+        "hosts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Give each service with a port (proxies aside) a local address, <id>.localhost, that Runbar routes to whatever port it runs on. The browser keeps its saved passwords and cookies for that address. Each service can set or turn off its own with host."
+        },
+        "hostPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 80,
+          "description": "Port the .localhost addresses answer on. 80 keeps it out of the URL (http://acme-web.localhost)."
         }
       }
     },
@@ -75,7 +87,7 @@ public enum BundledDocs {
         "command": {
           "type": "string",
           "minLength": 1,
-          "description": "Command that runs the service in the foreground. Runs in zsh -l -c inside cwd. {port} becomes the port the service will start on."
+          "description": "Command that runs the service in the foreground. Runs in zsh -l -c inside cwd. {port} becomes the port the service will start on, {host} its local address (acme-web.localhost) and {url} the URL the browser uses (http://acme-web.localhost)."
         },
         "cwd": {
           "type": "string",
@@ -105,12 +117,16 @@ public enum BundledDocs {
         },
         "open": {
           "type": "string",
-          "description": "URL for the Open button. {port} becomes the real port. Default: http://localhost:{port}."
+          "description": "URL for the Open button. {port} becomes the real port, {host} and {url} the local address. Default: the local address (http://<id>.localhost), or http://localhost:{port} for a service without one."
+        },
+        "host": {
+          "type": ["string", "boolean"],
+          "description": "The service's local address, always under .localhost: \"acme\" is acme.localhost, \"app.acme\" is app.acme.localhost. false turns it off. Default: <id>.localhost for a service with a port (not a proxy), unless settings.hosts is false."
         },
         "env": {
           "type": "object",
           "additionalProperties": { "type": ["string", "number", "boolean"] },
-          "description": "Extra environment variables."
+          "description": "Extra environment variables. {port}, {host} and {url} are replaced in the values (\"BETTER_AUTH_URL\": \"{url}\")."
         },
         "envFile": {
           "type": "string",
@@ -222,12 +238,13 @@ Service:
 
 | field       | type                                        | what it does |
 |-------------|---------------------------------------------|--------------|
-| `command`   | string, required                            | command that runs the service in the foreground; `{port}` becomes the port it will start on |
+| `command`   | string, required                            | command that runs the service in the foreground; `{port}` becomes the port it will start on, `{host}` and `{url}` its local address |
 | `cwd`       | path                                        | relative to `root`, or absolute (default: the `root`) |
 | `port`      | number                                      | expected port; Runbar exports `PORT` and warns if the service starts on a different one |
 | `type`      | `nextjs` `node` `python` `docker` `java` `proxy` `other` | icon and port rules; guessed from the command if omitted |
-| `open`      | URL                                         | where the Open button goes; `{port}` becomes the real port |
-| `env`       | object                                      | extra environment variables |
+| `open`      | URL                                         | where the Open button goes; `{port}` becomes the real port (default: the local address) |
+| `host`      | name or `false`                             | local address under `.localhost` (`"acme"` → `acme.localhost`); `false` turns it off (default: `<id>.localhost`) |
+| `env`       | object                                      | extra environment variables; `{port}`, `{host}` and `{url}` are replaced in the values |
 | `envFile`   | path                                        | `KEY=value` file to load, relative to `cwd` |
 | `health`    | path or URL                                 | must answer 2xx/3xx for the service to count as running |
 | `autostart` | `true`/`false`                              | start when Runbar opens |
@@ -237,6 +254,42 @@ Service:
 | `autoPort`  | `true`/`false`                              | if the port is taken, start on the next free one (default: `settings.autoPort`; always off for proxies) |
 | `needs`     | list of ids                                 | services (usually proxies) opened before this one starts |
 | `idle`      | `5m` `15m` `1h` `never`                     | proxies only: close after this long with no connections (default `15m`) |
+
+## Local addresses
+
+Every service with a port (proxies aside) also answers at `http://<id>.localhost`:
+Runbar listens on port 80 of this Mac (loopback only, no root) and passes each
+request, WebSockets included, to whatever port the service runs on now. The
+browser keeps saved passwords and cookies per address, so they survive autoPort
+moving the service, and two apps no longer share `localhost`'s cookies.
+
+- `"host": "acme"` gives `acme-web` the address `acme.localhost`; `"app.acme"`
+  gives `app.acme.localhost`. `"host": false` turns it off for that service, and
+  `"settings": { "hosts": false }` for all of them.
+- `.localhost` names reach this Mac on their own (browsers and macOS), with no
+  `/etc/hosts` entry.
+- The service sees the original `Host` header (`acme.localhost`), so links and
+  redirects it builds from it stay on the address.
+- Apps that check their own URL (Better Auth's `BETTER_AUTH_URL`, NextAuth's
+  `NEXTAUTH_URL`, OAuth callbacks) need it set to the address: use `{url}` in
+  `env` or in the command, which becomes `http://acme-web.localhost`.
+
+```json
+"acme-web": {
+  "cwd": "acme-web",
+  "command": "npm run dev -- -p {port}",
+  "port": 3000,
+  "host": "acme",
+  "env": { "BETTER_AUTH_URL": "{url}" }
+}
+```
+
+- `http://localhost` lists every address and whether its service is running. An
+  address whose service is stopped or starting shows a page that loads the app
+  as soon as it answers.
+- If something else holds port 80, the panel says who, Open falls back to
+  `localhost:<port>`, and Runbar tries again every few seconds.
+  `settings.hostPort` moves the addresses to another port (`http://acme.localhost:8888`).
 
 ## Proxies
 
@@ -274,12 +327,13 @@ port-forward`, `ssh -L`, `aws ssm start-session`. Declare it as a service with
 General settings (optional):
 
 ```json
-"settings": { "look": "auto", "shell": "/bin/zsh", "notifyOnCrash": true, "autoPort": false, "activeProjectsFirst": true }
+"settings": { "look": "auto", "shell": "/bin/zsh", "notifyOnCrash": true, "autoPort": false, "activeProjectsFirst": true, "hosts": true, "hostPort": 80 }
 ```
 
 `look`: `auto` (glass on macOS 26+), `solid` or `glass`.
 `autoPort`: default for every service; each service can override it.
 `activeProjectsFirst`: projects with something running come first in the panel (on by default).
+`hosts`: each service's local address, `<id>.localhost` (on by default). `hostPort`: the port those addresses answer on (80).
 
 ## Rules
 
@@ -338,7 +392,7 @@ The app installs the `runbar` command (⋯ menu → Install the runbar command).
 ```
 runbar validate [--json]        check config.json (line and column of each error)
 runbar scan [--all] [--json]    dev servers in the projects' folders not in config.json
-runbar status [--json]          status, real port, memory and CPU of each service
+runbar status [--json]          status, real port, address, memory and CPU of each service
 runbar start <id> [--wait]      start a service (--wait waits for the port to open)
 runbar stop <id>                stop the service and its child processes
 runbar restart <id> [--wait]    restart

@@ -111,6 +111,14 @@ struct PopoverView: View {
                 .padding(.horizontal, t.gutter)
                 .padding(.top, 10)
             }
+            if tab == .services, let problem = model.hostsProblem {
+                Banner(
+                    text: "The .localhost addresses aren't answering: \(problem). Open uses localhost and the port meanwhile, and Runbar tries again every few seconds.",
+                    actionLabel: "Try again", action: { model.syncHostProxy(retry: true) }
+                )
+                .padding(.horizontal, t.gutter)
+                .padding(.top, 10)
+            }
             if tab == .services && model.groups.isEmpty {
                 emptyState(t)
                     .padding(.horizontal, t.gutter)
@@ -147,6 +155,7 @@ struct PopoverView: View {
         if KeepAwake.shared.isOn { height -= 42 }
         if alerts > 0 { height -= 40 + 51 * CGFloat(alerts) }
         if model.configError != nil { height -= 106 }
+        if model.hostsProblem != nil { height -= 96 }
         return max(height, 160)
     }
 
@@ -611,7 +620,7 @@ struct PopoverView: View {
         let ports = ([rt.config.port].compactMap { $0 } + rt.listening + (rt.external?.ports ?? [])).map(String.init).joined(separator: " ")
         let tool = rt.config.isProxy ? rt.config.proxyTool.label : ""
         let kind = ServiceKind.of(rt.config).label
-        let hay = "\(rt.id) \(rt.config.command) \(rt.config.type.label) \(kind) \(tool) \(rt.config.projectName) \(ports)".lowercased()
+        let hay = "\(rt.id) \(rt.config.command) \(rt.config.type.label) \(kind) \(tool) \(rt.config.projectName) \(ports) \(rt.config.host ?? "")".lowercased()
         return hay.contains(q)
     }
 
@@ -1106,6 +1115,9 @@ private struct ServiceRow: View {
             }
             if d.isProxy, let url = runtime.config.url(port: runtime.expectedPort) {
                 Button("Copy \(url.scheme ?? "connection") URL") { Pasteboard.copy(url.absoluteString) }
+            }
+            if let address = runtime.config.hostURL {
+                Button("Copy \(runtime.config.host ?? "address")") { Pasteboard.copy(address) }
             }
             Button("Open full log") { NSWorkspace.shared.open(runtime.logURL) }
         }

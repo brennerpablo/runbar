@@ -128,7 +128,7 @@ extension AppModel {
             let real = rt.realPort
             let expected = rt.expectedPort
             d.portLabel = (real ?? expected).map { ":\($0)" }
-            d.url = cfg.url(port: real ?? expected)
+            d.url = cfg.url(port: real ?? expected, viaHost: hostsReady)
             let since = rt.startedAt.map { "since \(Format.clock($0, now: now))" } ?? "running"
             let log = rt.lastLogAt.map { "log \(Format.ago($0, now: now))" } ?? "no log"
             d.subtitle = proxy ? proxyUsage(rt) : "\(since) · \(log)"
@@ -192,7 +192,7 @@ extension AppModel {
             let real = port.flatMap { ext.ports.contains($0) ? $0 : nil } ?? ext.ports.first
             d.realPort = real
             d.portLabel = (real ?? port).map { ":\($0)" }
-            d.url = cfg.url(port: real)
+            d.url = cfg.url(port: real, viaHost: hostsReady)
             d.subtitle = "outside Runbar · since \(Format.clock(ext.startedAt, now: now))"
             if proxy { d.subtitle = "outside Runbar · " + proxyUsage(rt) }
             if let port, let real, real != port {

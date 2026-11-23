@@ -50,13 +50,18 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
     public var needs: [String]
     /// Proxies only: seconds with no connections before Runbar closes it; nil never closes it.
     public var idle: TimeInterval?
+    /// The local name the browser reaches it by (`fundsys-app.localhost`), routed by Runbar to wherever
+    /// the service listens; nil when it has none.
+    public var host: String?
+    /// The port those names answer on (`settings.hostPort`): 80 leaves it out of the URL.
+    public var hostPort: Int
 
     public init(
         id: String, projectID: String, projectName: String, command: String, cwd: String,
         port: Int? = nil, type: ServiceType = .other, open: String? = nil, env: [String: String] = [:],
         envFile: String? = nil, health: String? = nil, autostart: Bool = false,
         restart: RestartPolicy = .never, stop: String? = nil, autoPort: Bool = false, install: String? = nil,
-        needs: [String] = [], idle: TimeInterval? = nil
+        needs: [String] = [], idle: TimeInterval? = nil, host: String? = nil, hostPort: Int = 80
     ) {
         self.id = id
         self.projectID = projectID
@@ -76,6 +81,8 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
         self.install = install
         self.needs = needs
         self.idle = idle
+        self.host = host
+        self.hostPort = hostPort
     }
 
     /// A local port forwarded to something remote (Cloud SQL, a cluster, a host over SSH): opened on
@@ -84,27 +91,46 @@ public struct ServiceConfig: Sendable, Equatable, Identifiable {
 
     public var proxyTool: ProxyTool { ProxyTool.detect(command) }
 
-    /// Command with `{port}` replaced by the port the service will start on.
-    public func command(port launchPort: Int?) -> String {
-        guard let p = launchPort ?? port else { return command }
-        return command.replacingOccurrences(of: "{port}", with: String(p))
+    /// `http://fundsys-app.localhost`, or with `:port` when names answer on a port other than 80.
+    public var hostURL: String? {
+        host.map { "http://\($0)" + (hostPort == 80 ? "" : ":\(hostPort)") }
     }
 
-    /// Changes when anything that requires restarting the process changes.
+    /// `{port}`, `{host}` and `{url}` in a command, an env value or `open`. Without a local name, `{host}`
+    /// is `localhost` and `{url}` is `http://localhost:<port>`.
+    public func expand(_ text: String, port launchPort: Int?) -> String {
+        guard text.contains("{") else { return text }
+        let p = launchPort ?? port
+        var s = text
+        if let p { s = s.replacingOccurrences(of: "{port}", with: String(p)) }
+        s = s.replacingOccurrences(of: "{host}", with: host ?? "localhost")
+        if let url = hostURL ?? p.map({ "http://localhost:\($0)" }) { s = s.replacingOccurrences(of: "{url}", with: url) }
+        return s
+    }
+
+    /// Command with `{port}`, `{host}` and `{url}` replaced, for the port the service will start on.
+    public func command(port launchPort: Int?) -> String {
+        expand(command, port: launchPort)
+    }
+
+    /// Changes when anything that requires restarting the process changes. The local name only counts
+    /// when the command or its env use it.
     public var launchSignature: String {
         let envPart = env.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "\u{1}")
-        return [command, cwd, String(port ?? 0), envPart, envFile ?? ""].joined(separator: "\u{0}")
+        var parts = [command, cwd, String(port ?? 0), envPart, envFile ?? ""]
+        let usesHost = ([command, stop ?? ""] + Array(env.values)).contains { $0.contains("{host}") || $0.contains("{url}") }
+        if usesHost { parts.append(hostURL ?? "") }
+        return parts.joined(separator: "\u{0}")
     }
 
-    /// URL for the "Open" button. `{port}` becomes the actual port. A proxy has none unless `open` says.
-    public func url(port realPort: Int?) -> URL? {
+    /// URL for the "Open" button: `open` with its placeholders replaced, else the service's local name
+    /// when `viaHost` (Runbar is answering on it), else `http://localhost:<port>`. A proxy has none unless
+    /// `open` says.
+    public func url(port realPort: Int?, viaHost: Bool = false) -> URL? {
         let p = realPort ?? port
-        if let open {
-            var s = open
-            if let p { s = s.replacingOccurrences(of: "{port}", with: String(p)) }
-            return URL(string: s)
-        }
+        if let open { return URL(string: expand(open, port: p)) }
         guard let p, !isProxy else { return nil }
+        if viaHost, let hostURL { return URL(string: hostURL) }
         return URL(string: "http://localhost:\(p)")
     }
 }
@@ -124,6 +150,10 @@ public struct SettingsConfig: Sendable, Equatable {
     public var autoPort: Bool = false
     /// The panel lists projects with something running before the others.
     public var activeProjectsFirst: Bool = true
+    /// Each service with a port gets a local name, `<id>.localhost`, that Runbar routes to it.
+    public var hosts: Bool = true
+    /// The port those names answer on. 80 keeps it out of the URL.
+    public var hostPort: Int = 80
     public init() {}
 }
 
@@ -231,11 +261,13 @@ public enum ConfigEditor {
 struct ConfigValidator {
     var issues: [ConfigIssue] = []
     var defaultAutoPort = false
+    var settingsHosts = true
+    var hostPort = 80
 
     static let rootKeys = ["$schema", "version", "settings", "projects"]
-    static let settingsKeys = ["look", "shell", "notifyOnCrash", "autoPort", "activeProjectsFirst"]
+    static let settingsKeys = ["look", "shell", "notifyOnCrash", "autoPort", "activeProjectsFirst", "hosts", "hostPort"]
     static let projectKeys = ["name", "root", "services"]
-    static let serviceKeys = ["command", "cwd", "port", "type", "open", "env", "envFile", "health", "autostart", "restart", "stop", "autoPort", "install", "needs", "idle"]
+    static let serviceKeys = ["command", "cwd", "port", "type", "open", "env", "envFile", "health", "autostart", "restart", "stop", "autoPort", "install", "needs", "idle", "host"]
 
     /// Where each service's `needs` sits in the file, to point at it once every id is known.
     private var needsRefs: [(id: String, path: String, position: JSONPosition?)] = []
@@ -315,6 +347,8 @@ struct ConfigValidator {
             if case .object(let so) = s {
                 config.settings = settings(so)
                 defaultAutoPort = config.settings.autoPort
+                settingsHosts = config.settings.hosts
+                hostPort = config.settings.hostPort
             } else {
                 add(.error, "settings must be an object", "settings", root.position(of: "settings"))
             }
@@ -330,6 +364,7 @@ struct ConfigValidator {
 
         var seen: [String: String] = [:]
         var ports: [Int: String] = [:]
+        var hosts: [String: String] = [:]
         for entry in projects.entries {
             let path = "projects.\(entry.key)"
             guard Self.validID(entry.key) else {
@@ -373,8 +408,19 @@ struct ConfigValidator {
                     add(.error, "the service must be an object { … }", spath, se.position)
                     continue
                 }
-                guard let svc = service(id: se.key, project: project, obj: so, path: spath, position: se.position) else { continue }
+                guard var svc = service(id: se.key, project: project, obj: so, path: spath, position: se.position) else { continue }
                 seen[se.key] = entry.key
+                if let host = svc.host {
+                    if let other = hosts[host] {
+                        add(.warning, "\(host) is already \(other)'s address; give this one its own with \"host\"", spath, so.position(of: "host") ?? se.position)
+                        svc.host = nil
+                    } else {
+                        hosts[host] = se.key
+                    }
+                }
+                if let port = svc.port, port == hostPort, svc.host != nil || settingsHosts, !svc.isProxy {
+                    add(.warning, "port \(port) is where the .localhost addresses answer (settings.hostPort); pick another", spath + ".port", so.position(of: "port"))
+                }
                 if !svc.needs.isEmpty { needsRefs.append((se.key, spath + ".needs", so.position(of: "needs"))) }
                 if let port = svc.port {
                     if let other = ports[port] {
@@ -443,6 +489,14 @@ struct ConfigValidator {
         if let n = bool(o, "notifyOnCrash", "settings") { s.notifyOnCrash = n }
         if let a = bool(o, "autoPort", "settings") { s.autoPort = a }
         if let f = bool(o, "activeProjectsFirst", "settings") { s.activeProjectsFirst = f }
+        if let h = bool(o, "hosts", "settings") { s.hosts = h }
+        if let v = o["hostPort"], !v.isNull {
+            if let n = v.numberValue, n.rounded() == n, n >= 1, n <= 65535 {
+                s.hostPort = Int(n)
+            } else {
+                add(.error, "hostPort must be a whole number from 1 to 65535", "settings.hostPort", o.position(of: "hostPort"))
+            }
+        }
         return s
     }
 
@@ -589,14 +643,82 @@ struct ConfigValidator {
             }
         }
 
+        let host = self.host(o, id: id, port: port, type: type, path: path)
+        if let host {
+            // An app told its URL is localhost:<port> rejects (or redirects away from) its local address.
+            let pinned = ["localhost:{port}", "127.0.0.1:{port}"]
+            if let command, pinned.contains(where: command.contains) {
+                add(.warning, "the command gives the app http://localhost:{port} as its URL, but the browser opens it at http://\(host); use {url} there so sign-in and redirects stay on that address", path + ".command", o.position(of: "command"))
+            }
+            for (key, value) in env where pinned.contains(where: value.contains) {
+                add(.warning, "\(key) points at localhost:{port}, but the browser opens this service at http://\(host); use {url} there", path + ".env." + key, o.position(of: "env"))
+            }
+        }
+
         let errorsAfter = issues.filter { $0.severity == .error }.count
         guard errorsAfter == errorsBefore, let command, let cwd else { return nil }
         return ServiceConfig(
             id: id, projectID: project.id, projectName: project.name, command: command, cwd: cwd,
             port: port, type: type, open: open, env: env, envFile: envFile, health: health,
             autostart: autostart, restart: restart, stop: stop, autoPort: autoPort, install: install,
-            needs: needs, idle: idle
+            needs: needs, idle: idle, host: host, hostPort: hostPort
         )
+    }
+
+    /// The service's local name, always under `.localhost` (the one domain browsers and macOS send to
+    /// this Mac on their own): `"host": "fundsys"` is `fundsys.localhost`, `"app.fundsys"` is
+    /// `app.fundsys.localhost`. `false` turns it off; without the field, a service with a port (not a
+    /// proxy) gets `<id>.localhost` unless `settings.hosts` is false.
+    mutating func host(_ o: JSONObject, id: String, port: Int?, type: ServiceType, path: String) -> String? {
+        let hpath = path + ".host"
+        var name: String?
+        switch o["host"] {
+        case nil, .null?:
+            guard settingsHosts, port != nil, type != .proxy else { return nil }
+            return Self.defaultHost(for: id)
+        case .bool(false)?:
+            return nil
+        case .bool(true)?:
+            name = Self.defaultHost(for: id)
+        case .string(let raw)?:
+            var h = raw.trimmingCharacters(in: .whitespaces).lowercased()
+            if h.hasSuffix(".") { h.removeLast() }
+            if h.contains("://") || h.contains("/") || h.contains(":") {
+                add(.error, "host is a name, like \"\(id)\" (for \(id).localhost), not a URL", hpath, o.position(of: "host"))
+                return nil
+            }
+            if h == "localhost" {
+                add(.error, "host can't be localhost itself; use a name under it, like \"\(id)\"", hpath, o.position(of: "host"))
+                return nil
+            }
+            if !h.hasSuffix(".localhost") { h += ".localhost" }
+            guard Self.validHostname(h) else {
+                add(.error, "host \"\(raw)\" isn't a valid name: use letters, digits and -, with dots between parts, like \"app.fundsys\"", hpath, o.position(of: "host"))
+                return nil
+            }
+            name = h
+        case let v?:
+            add(.error, "host must be a name like \"\(id)\" (for \(id).localhost), or false, not \(v.typeName)", hpath, o.position(of: "host"))
+            return nil
+        }
+        if port == nil {
+            add(.warning, "host needs a \"port\" to send the browser to", hpath, o.position(of: "host"))
+            return nil
+        }
+        return name
+    }
+
+    /// `fundsys-app.localhost` from the id `fundsys-app`: lowercase, with `_` as `-` (not valid in names).
+    static func defaultHost(for id: String) -> String? {
+        let name = id.lowercased().replacingOccurrences(of: "_", with: "-") + ".localhost"
+        return validHostname(name) ? name : nil
+    }
+
+    static func validHostname(_ s: String) -> Bool {
+        guard !s.isEmpty, s.count <= 253 else { return false }
+        return s.split(separator: ".", omittingEmptySubsequences: false).allSatisfy {
+            $0.range(of: #"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"#, options: .regularExpression) != nil
+        }
     }
 
     static func guessType(command: String, cwd: String) -> ServiceType {

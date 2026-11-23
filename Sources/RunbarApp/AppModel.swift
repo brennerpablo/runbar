@@ -79,6 +79,8 @@ final class AppModel {
     private(set) var found: [FoundService] = []
     /// Found services the user doesn't want suggested, by id.
     private(set) var ignoredFound: Set<String> = FoundIgnores.load()
+    /// Where the services' local names (`fundsys-app.localhost`) stand: answering, or why they can't.
+    private(set) var hostsState: HostProxy.State = .off
 
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var control: ControlServer?
@@ -98,6 +100,9 @@ final class AppModel {
     /// The config the last look through the project folders was for, and when it finished.
     @ObservationIgnored private var foundFor: RunbarConfig?
     @ObservationIgnored private var foundAt: Date?
+    /// Routes each local name to the port its service listens on now; the proxy reads it per connection.
+    @ObservationIgnored private let hostRouter = HostRouter()
+    @ObservationIgnored private var hostProxy: HostProxy?
 
     /// Used by --snapshot mode to draw both looks.
     var lookOverride: LookSetting?
@@ -146,6 +151,7 @@ final class AppModel {
 
     func shutdown() {
         control?.stop()
+        hostProxy?.stop()
         guard stopServicesOnQuit else {
             persistState()
             return
@@ -179,6 +185,7 @@ final class AppModel {
             configError = nil
             configWarnings = result.warnings
             syncRuntimes()
+            syncHostProxy()
             findServices()
         } else {
             configError = result.errors.first
@@ -570,6 +577,7 @@ final class AppModel {
             checkSignIns()
         }
         if tickCount % 30 == 0 { findServices() }
+        if tickCount % 5 == 0, case .failed = hostsState { syncHostProxy(retry: true) }
         guard !scanning else { return }
         scanning = true
         scanQueue.async {
@@ -641,6 +649,7 @@ final class AppModel {
         if sortedOthers != otherListeners { otherListeners = sortedOthers }
 
         applyProxyUsage(snap, managed: managed)
+        updateHostRoutes()
         // The ports listed outside Runbar, plus whatever holds a port from config.json (even an app's helper).
         let blockers = config.services.compactMap(\.port).compactMap { owners[$0] }.filter { $0.serviceID == nil }.map(\.pid)
         lookUpLaunchd(for: Set(sortedOthers.map(\.pid) + blockers), snap: snap)
@@ -736,6 +745,85 @@ final class AppModel {
         }
     }
 
+    // MARK: - Local names
+
+    /// Runbar answers on the services' local names right now: the Open button can use them.
+    var hostsReady: Bool {
+        if case .listening = hostsState { return true }
+        return false
+    }
+
+    /// Why the local names don't answer, for the panel and `runbar status`; nil when they do (or are off).
+    var hostsProblem: String? {
+        guard case .failed(let port, let why) = hostsState else { return nil }
+        if let owner = portOwners[port] { return "port \(port) is in use by \(owner.label)" }
+        return "port \(port): \(why)"
+    }
+
+    /// Listens on `settings.hostPort` while any service has a local name, and stops when none has.
+    /// `retry` tries again after a failure (the port was taken; it may be free now).
+    func syncHostProxy(retry: Bool = false) {
+        guard started, !snapshotMode else { return }
+        updateHostRoutes()
+        guard config.services.contains(where: { $0.host != nil }) else {
+            hostProxy?.stop()
+            hostProxy = nil
+            if hostsState != .off { hostsState = .off }
+            return
+        }
+        let port = config.settings.hostPort
+        var failed = false
+        if case .failed = hostsState { failed = true }
+        if hostProxy != nil, hostsState.port == port, !(failed && retry) { return }
+        if hostProxy == nil {
+            hostProxy = HostProxy(router: hostRouter) { [weak self] state in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.hostProxyChanged(state) }
+                }
+            }
+        }
+        if !failed { hostsState = .starting(port) }
+        hostProxy?.start(port: port)
+    }
+
+    private func hostProxyChanged(_ state: HostProxy.State) {
+        // A state from a port given up on since (hostPort changed) doesn't count.
+        guard hostProxy != nil, state.port == config.settings.hostPort, state != hostsState else { return }
+        // While retrying, a failed port stays failed until it listens: no flicker through "starting".
+        if case .starting = state, case .failed = hostsState { return }
+        hostsState = state
+    }
+
+    /// Each local name and the port its service answers on now: where it listens when running (inside or
+    /// outside Runbar), nothing when it isn't.
+    private func updateHostRoutes() {
+        var routes: [HostRoute] = []
+        for svc in config.services {
+            guard let host = svc.host, let rt = runtimes[svc.id] else { continue }
+            var port: Int?
+            var status: String
+            switch rt.phase {
+            case .stopped where rt.external != nil:
+                let ext = rt.external!
+                port = svc.port.flatMap { ext.ports.contains($0) ? $0 : nil } ?? ext.ports.first
+                status = "running"
+            case .starting:
+                port = rt.realPort ?? rt.expectedPort
+                status = "starting"
+            case .running:
+                port = rt.realPort ?? rt.expectedPort
+                status = "running"
+            case .stopped: status = "stopped"
+            case .stopping: status = "stopping"
+            case .waiting: status = "waiting"
+            case .crashed: status = "crashed"
+            case .failed: status = "failed"
+            }
+            routes.append(HostRoute(host: host, serviceID: svc.id, port: port, status: status))
+        }
+        hostRouter.update(routes)
+    }
+
     // MARK: - State across launches
 
     func persistState() {
@@ -818,7 +906,7 @@ final class AppModel {
         case "ping":
             return ControlResponse(ok: true, message: "pong")
         case "status":
-            return ControlResponse(ok: true, services: statusList(), configError: configError?.description)
+            return ControlResponse(ok: true, services: statusList(), configError: configError?.description, hostsProblem: hostsProblem)
         case "reload":
             reloadConfig(force: true)
             return ControlResponse(ok: configError == nil, message: "config reloaded: \(config.services.count) services", configError: configError?.description)
@@ -883,7 +971,7 @@ final class AppModel {
                 memoryMB: d.memory.map { Double($0) / 1_048_576 },
                 cpuPercent: d.cpu, processes: rt.isAlive ? rt.processCount : rt.external?.pids.count,
                 startedAt: rt.isAlive ? rt.startedAt : rt.external?.startedAt, lastLogAt: rt.lastLogAt, exitCode: rt.lastExitCode,
-                url: d.url?.absoluteString, command: rt.config.command(port: rt.expectedPort),
+                url: d.url?.absoluteString, host: rt.config.host, command: rt.config.command(port: rt.expectedPort),
                 cwd: rt.config.cwd, logFile: rt.logURL.path, alert: d.alert ? d.subtitle : nil,
                 activePort: rt.activePort,
                 needs: rt.config.needs.isEmpty ? nil : rt.config.needs,

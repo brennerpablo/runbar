@@ -154,9 +154,12 @@ case "status":
         exit(0)
     }
     if let err = response.configError { print("config.json has an error: \(err)\n") }
+    if let problem = response.hostsProblem { print("The .localhost addresses aren't answering: \(problem)\n") }
+    // The address column fits the longest name, and only shows when some service has one.
+    let addressWidth = services.compactMap(\.host).map(\.count).max().map { $0 + 2 }
     let names: [String: String] = ["running": "running", "starting": "starting", "stopping": "stopping", "stopped": "stopped", "waiting": "waiting", "crashed": "crashed", "failed": "failed to start", "external": "outside Runbar"]
     let proxyNames: [String: String] = ["running": "open", "starting": "opening", "stopping": "closing", "stopped": "closed", "failed": "failed to open"]
-    print(pad("SERVICE", 24) + pad("STATUS", 16) + pad("PORT", 8) + pad("MEM", 10) + pad("CPU", 8) + "SINCE")
+    print(pad("SERVICE", 24) + pad("STATUS", 16) + pad("PORT", 8) + (addressWidth.map { pad("ADDRESS", $0) } ?? "") + pad("MEM", 10) + pad("CPU", 8) + "SINCE")
     for s in services {
         let port = (s.realPort ?? s.port).map { ":\($0)" } ?? "—"
         var mem = s.memoryMB.map { Format.memory(UInt64($0 * 1_048_576)) } ?? "—"
@@ -168,7 +171,8 @@ case "status":
         }
         let since = s.startedAt.map { Format.clock($0) } ?? ""
         let status = (s.isProxy ? proxyNames[s.status] : nil) ?? names[s.status] ?? s.status
-        var line = pad(s.id, 24) + pad(status, 16) + pad(port, 8) + pad(mem, 10) + pad(cpu, 8) + since
+        let address = addressWidth.map { pad(s.host ?? "—", $0) } ?? ""
+        var line = pad(s.id, 24) + pad(status, 16) + pad(port, 8) + address + pad(mem, 10) + pad(cpu, 8) + since
         if let waiting = s.waitingFor, !waiting.isEmpty { line += "  waiting for \(waiting.joined(separator: ", "))" }
         if let closes = s.closesAt { line += "  closes \(Format.clock(closes)) if idle" }
         if let alert = s.alert { line += "  ⚠ \(alert)" }

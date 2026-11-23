@@ -29,6 +29,8 @@ public struct ServiceStatus: Codable, Sendable {
     public var lastLogAt: Date?
     public var exitCode: Int32?
     public var url: String?
+    /// The service's local name (`fundsys-app.localhost`), routed by Runbar to the port it listens on.
+    public var host: String?
     public var command: String
     public var cwd: String
     public var logFile: String
@@ -46,7 +48,7 @@ public struct ServiceStatus: Codable, Sendable {
 
     public init(id: String, project: String, type: String, status: String, port: Int?, realPort: Int?, listening: [Int],
                 pid: Int32?, memoryMB: Double?, cpuPercent: Double?, processes: Int?, startedAt: Date?, lastLogAt: Date?,
-                exitCode: Int32?, url: String?, command: String, cwd: String, logFile: String, alert: String?, activePort: Int? = nil,
+                exitCode: Int32?, url: String?, host: String? = nil, command: String, cwd: String, logFile: String, alert: String?, activePort: Int? = nil,
                 needs: [String]? = nil, waitingFor: [String]? = nil, connections: Int? = nil, clients: [String]? = nil, closesAt: Date? = nil) {
         self.id = id
         self.project = project
@@ -63,6 +65,7 @@ public struct ServiceStatus: Codable, Sendable {
         self.lastLogAt = lastLogAt
         self.exitCode = exitCode
         self.url = url
+        self.host = host
         self.command = command
         self.cwd = cwd
         self.logFile = logFile
@@ -84,13 +87,17 @@ public struct ControlResponse: Codable, Sendable {
     public var error: String?
     public var services: [ServiceStatus]?
     public var configError: String?
+    /// Why the local names (`*.localhost`) aren't answering, when they aren't.
+    public var hostsProblem: String?
 
-    public init(ok: Bool, message: String? = nil, error: String? = nil, services: [ServiceStatus]? = nil, configError: String? = nil) {
+    public init(ok: Bool, message: String? = nil, error: String? = nil, services: [ServiceStatus]? = nil, configError: String? = nil,
+                hostsProblem: String? = nil) {
         self.ok = ok
         self.message = message
         self.error = error
         self.services = services
         self.configError = configError
+        self.hostsProblem = hostsProblem
     }
 }
 
